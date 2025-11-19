@@ -17,6 +17,7 @@ class CF7_GetResponse_Integration {
         add_action('admin_init', array($this, 'handle_save'));
         add_action('wpcf7_mail_sent', array($this, 'handle_form_submission'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+        add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
     }
     
     public function add_admin_menu() {
@@ -33,9 +34,14 @@ class CF7_GetResponse_Integration {
     
     public function enqueue_admin_scripts($hook) {
         if ($hook !== 'toplevel_page_cf7-getresponse') return;
-        
+
         wp_enqueue_style('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-style.css', array(), '3.0');
         wp_enqueue_script('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-script.js', array('jquery'), '3.0', true);
+
+        wp_localize_script('cf7-gr-admin', 'cf7GrAjax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cf7_gr_ajax_nonce')
+        ));
     }
     
     public function handle_save() {
@@ -73,6 +79,7 @@ class CF7_GetResponse_Integration {
                         'enabled' => true,
                         'api_key' => sanitize_text_field($data['api_key']),
                         'campaign_id' => sanitize_text_field($data['campaign_id']),
+                        'campaign_id_secondary' => isset($data['campaign_id_secondary']) ? sanitize_text_field($data['campaign_id_secondary']) : '',
                         'mode' => $mode,
                         'acceptance_field' => isset($data['acceptance_field']) ? sanitize_text_field($data['acceptance_field']) : '',
                         'email_field' => sanitize_text_field($data['email_field']),
@@ -157,25 +164,60 @@ class CF7_GetResponse_Integration {
                                 <!-- Podstawowe ustawienia -->
                                 <div class="section">
                                     <h3>🔧 Podstawowe ustawienia</h3>
-                                    <div class="config-grid">
-                                        <div class="config-field">
-                                            <label>🔑 GetResponse API Key</label>
-                                            <input type="text" 
+                                    <div class="config-field api-key-field">
+                                        <label>🔑 GetResponse API Key</label>
+                                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                                            <input type="text"
+                                                   class="api-key-input"
                                                    name="mappings[<?php echo $form_id; ?>][api_key]"
                                                    value="<?php echo esc_attr($mapping['api_key'] ?? ''); ?>"
                                                    placeholder="Wklej API Key"
+                                                   data-form-id="<?php echo $form_id; ?>"
+                                                   style="flex: 1;"
                                                    <?php echo $enabled ? 'required' : ''; ?>>
-                                            <small>GetResponse → Menu → Integracje i API → API</small>
+                                            <button type="button" class="button load-campaigns-btn" data-form-id="<?php echo $form_id; ?>">
+                                                🔄 Załaduj listy
+                                            </button>
                                         </div>
-                                        
-                                        <div class="config-field">
-                                            <label>📋 Campaign ID (Lista)</label>
-                                            <input type="text" 
-                                                   name="mappings[<?php echo $form_id; ?>][campaign_id]"
-                                                   value="<?php echo esc_attr($mapping['campaign_id'] ?? ''); ?>"
-                                                   placeholder="np. VaxYZ"
-                                                   <?php echo $enabled ? 'required' : ''; ?>>
-                                            <small>ID listy mailingowej w GetResponse</small>
+                                        <small>GetResponse → Menu → Integracje i API → API</small>
+                                        <div class="campaigns-loading" style="display: none; margin-top: 10px; color: #2271b1;">
+                                            ⏳ Pobieranie list z GetResponse...
+                                        </div>
+                                        <div class="campaigns-error" style="display: none; margin-top: 10px; color: #d63638;"></div>
+                                    </div>
+
+                                    <div class="config-grid">
+                                        <div class="config-field campaign-select-wrapper">
+                                            <label>📋 Lista główna (kontakt)</label>
+                                            <select class="campaign-select-primary"
+                                                    name="mappings[<?php echo $form_id; ?>][campaign_id]"
+                                                    data-form-id="<?php echo $form_id; ?>"
+                                                    <?php echo $enabled ? 'required' : ''; ?>>
+                                                <option value="">-- Najpierw załaduj listy --</option>
+                                                <?php if (!empty($mapping['campaign_id'])): ?>
+                                                    <option value="<?php echo esc_attr($mapping['campaign_id']); ?>" selected>
+                                                        <?php echo esc_html($mapping['campaign_id']); ?>
+                                                    </option>
+                                                <?php endif; ?>
+                                            </select>
+                                            <small>Zawsze zapisywana (tryb dual) lub jedyna lista (tryby always/checkbox)</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="config-grid dual-campaign-wrapper" style="<?php echo $mode !== 'dual' ? 'display:none;' : ''; ?>">
+                                        <div class="config-field campaign-select-wrapper">
+                                            <label>📬 Lista dodatkowa (newsletter)</label>
+                                            <select class="campaign-select-secondary"
+                                                    name="mappings[<?php echo $form_id; ?>][campaign_id_secondary]"
+                                                    data-form-id="<?php echo $form_id; ?>">
+                                                <option value="">-- Najpierw załaduj listy --</option>
+                                                <?php if (!empty($mapping['campaign_id_secondary'])): ?>
+                                                    <option value="<?php echo esc_attr($mapping['campaign_id_secondary']); ?>" selected>
+                                                        <?php echo esc_html($mapping['campaign_id_secondary']); ?>
+                                                    </option>
+                                                <?php endif; ?>
+                                            </select>
+                                            <small>Zapisywana tylko gdy checkbox zaznaczony (tryb dual)</small>
                                         </div>
                                     </div>
                                 </div>
@@ -201,15 +243,25 @@ class CF7_GetResponse_Integration {
                                         </label>
                                         
                                         <label class="radio-option">
-                                            <input type="radio" 
-                                                name="mappings[<?php echo $form_id; ?>][mode]" 
-                                                value="checkbox" 
+                                            <input type="radio"
+                                                name="mappings[<?php echo $form_id; ?>][mode]"
+                                                value="checkbox"
                                                 <?php checked($mode, 'checkbox'); ?>
                                                 onchange="toggleAcceptanceField(this)">
                                             <strong>✅ Tylko gdy checkbox/acceptance zaznaczony</strong>
                                             <small>Użytkownik musi zaznaczyć zgodę</small>
                                         </label>
-                                        
+
+                                        <label class="radio-option">
+                                            <input type="radio"
+                                                name="mappings[<?php echo $form_id; ?>][mode]"
+                                                value="dual"
+                                                <?php checked($mode, 'dual'); ?>
+                                                onchange="toggleAcceptanceField(this)">
+                                            <strong>🎯 Dwie listy - zależnie od zgody</strong>
+                                            <small>Zawsze zapisz na listę główną + dodatkowo na drugą listę jeśli zaznaczy zgodę</small>
+                                        </label>
+
                                         <div class="acceptance-field-wrapper" style="margin-top: 20px; <?php echo $mode === 'always' ? 'display:none;' : ''; ?>">
                                             <label><strong>Pole wyzwalające (checkbox/acceptance):</strong></label>
                                             <?php if (!empty($form_fields['acceptance'])): ?>
@@ -441,6 +493,7 @@ class CF7_GetResponse_Integration {
         
         // KROK 1: Sprawdź tryb działania
         $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
+        $acceptance_checked = false;
 
         if ($mode === 'checkbox') {
             // Sprawdź czy pole acceptance/trigger jest zaznaczone
@@ -450,6 +503,12 @@ class CF7_GetResponse_Integration {
                 return;
             }
             error_log("CF7→GR [Form {$form_id}]: Tryb checkbox - pole '{$acceptance_field}' zaznaczone ✓");
+            $acceptance_checked = true;
+        } elseif ($mode === 'dual') {
+            // Tryb dual - sprawdź checkbox ale nie przerywaj jeśli nie zaznaczony
+            $acceptance_field = isset($mapping['acceptance_field']) ? $mapping['acceptance_field'] : '';
+            $acceptance_checked = !empty($acceptance_field) && !empty($posted_data[$acceptance_field]);
+            error_log("CF7→GR [Form {$form_id}]: Tryb dual - checkbox " . ($acceptance_checked ? 'zaznaczony ✓' : 'NIE zaznaczony'));
         } else {
             // Tryb 'always' - zawsze wysyłaj
             error_log("CF7→GR [Form {$form_id}]: Tryb 'always' - wysyłam bez sprawdzania checkboxa");
@@ -493,18 +552,55 @@ class CF7_GetResponse_Integration {
         }
         
         // KROK 5: Wyślij do GetResponse
-        $result = $this->add_to_getresponse(
-            $mapping['api_key'],
-            $mapping['campaign_id'],
-            $email,
-            $name,
-            $custom_fields
-        );
-        
-        if ($result) {
-            error_log("CF7→GR [Form {$form_id}]: ✅ Sukces! Email '{$email}' dodany do listy");
+        if ($mode === 'dual') {
+            // Tryb dual - zawsze zapisz na listę główną
+            $result_primary = $this->add_to_getresponse(
+                $mapping['api_key'],
+                $mapping['campaign_id'],
+                $email,
+                $name,
+                $custom_fields
+            );
+
+            if ($result_primary) {
+                error_log("CF7→GR [Form {$form_id}]: ✅ Email '{$email}' dodany do listy głównej ({$mapping['campaign_id']})");
+            } else {
+                error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}' do listy głównej");
+            }
+
+            // Jeśli checkbox zaznaczony, zapisz też na drugą listę
+            if ($acceptance_checked && !empty($mapping['campaign_id_secondary'])) {
+                $result_secondary = $this->add_to_getresponse(
+                    $mapping['api_key'],
+                    $mapping['campaign_id_secondary'],
+                    $email,
+                    $name,
+                    $custom_fields
+                );
+
+                if ($result_secondary) {
+                    error_log("CF7→GR [Form {$form_id}]: ✅ Email '{$email}' dodany też do listy dodatkowej ({$mapping['campaign_id_secondary']})");
+                } else {
+                    error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}' do listy dodatkowej");
+                }
+            } else {
+                error_log("CF7→GR [Form {$form_id}]: ℹ️ Checkbox nie zaznaczony - pomijam listę dodatkową");
+            }
         } else {
-            error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}'");
+            // Tryby: always lub checkbox - standardowa wysyłka
+            $result = $this->add_to_getresponse(
+                $mapping['api_key'],
+                $mapping['campaign_id'],
+                $email,
+                $name,
+                $custom_fields
+            );
+
+            if ($result) {
+                error_log("CF7→GR [Form {$form_id}]: ✅ Sukces! Email '{$email}' dodany do listy");
+            } else {
+                error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}'");
+            }
         }
     }
     
@@ -550,6 +646,73 @@ class CF7_GetResponse_Integration {
         }
 
         return in_array($http_code, array(201, 202, 409));
+    }
+
+    public function ajax_get_campaigns() {
+        check_ajax_referer('cf7_gr_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Brak uprawnień'));
+            return;
+        }
+
+        $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
+
+        if (empty($api_key)) {
+            wp_send_json_error(array('message' => 'Brak API Key'));
+            return;
+        }
+
+        $campaigns = $this->get_campaigns_from_api($api_key);
+
+        if ($campaigns === false) {
+            wp_send_json_error(array('message' => 'Błąd podczas pobierania list z GetResponse'));
+            return;
+        }
+
+        wp_send_json_success(array('campaigns' => $campaigns));
+    }
+
+    private function get_campaigns_from_api($api_key) {
+        $ch = curl_init('https://api.getresponse.com/v3/campaigns');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'X-Auth-Token: api-key ' . $api_key,
+            'Content-Type: application/json'
+        ));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false) {
+            error_log("CF7→GR API Error (get campaigns): " . $curl_error);
+            return false;
+        }
+
+        if ($http_code !== 200) {
+            error_log("CF7→GR API Error (get campaigns) [{$http_code}]: " . $response);
+            return false;
+        }
+
+        $campaigns_data = json_decode($response, true);
+        if (!is_array($campaigns_data)) {
+            return false;
+        }
+
+        // Zwróć w formacie: array(array('id' => 'XyZ', 'name' => 'Nazwa listy'))
+        $campaigns = array();
+        foreach ($campaigns_data as $campaign) {
+            $campaigns[] = array(
+                'id' => $campaign['campaignId'],
+                'name' => $campaign['name']
+            );
+        }
+
+        return $campaigns;
     }
 }
 

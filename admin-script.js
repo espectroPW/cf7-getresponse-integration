@@ -1,5 +1,81 @@
 jQuery(document).ready(function($) {
-    
+
+    // Ładowanie kampanii z GetResponse
+    $(document).on('click', '.load-campaigns-btn', function() {
+        var btn = $(this);
+        var formId = btn.data('form-id');
+        var card = btn.closest('.cf7-gr-form-card');
+        var apiKeyInput = card.find('.api-key-input');
+        var apiKey = apiKeyInput.val().trim();
+        var loadingMsg = card.find('.campaigns-loading');
+        var errorMsg = card.find('.campaigns-error');
+        var primarySelect = card.find('.campaign-select-primary');
+        var secondarySelect = card.find('.campaign-select-secondary');
+
+        // Reset komunikatów
+        loadingMsg.hide();
+        errorMsg.hide().text('');
+
+        if (!apiKey) {
+            errorMsg.text('❌ Wpisz najpierw API Key').show();
+            return;
+        }
+
+        // Wyłącz przycisk i pokaż loading
+        btn.prop('disabled', true).text('⏳ Ładowanie...');
+        loadingMsg.show();
+
+        $.ajax({
+            url: cf7GrAjax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cf7_gr_get_campaigns',
+                nonce: cf7GrAjax.nonce,
+                api_key: apiKey
+            },
+            success: function(response) {
+                loadingMsg.hide();
+                btn.prop('disabled', false).text('🔄 Załaduj listy');
+
+                if (response.success && response.data.campaigns) {
+                    var campaigns = response.data.campaigns;
+
+                    // Zachowaj obecnie wybrane wartości
+                    var currentPrimary = primarySelect.val();
+                    var currentSecondary = secondarySelect.val();
+
+                    // Wyczyść selecty
+                    primarySelect.html('<option value="">-- Wybierz listę --</option>');
+                    secondarySelect.html('<option value="">-- Wybierz listę --</option>');
+
+                    // Wypełnij opcjami
+                    campaigns.forEach(function(campaign) {
+                        var option = '<option value="' + campaign.id + '">' + campaign.name + ' (' + campaign.id + ')</option>';
+                        primarySelect.append(option);
+                        secondarySelect.append(option);
+                    });
+
+                    // Przywróć wybrane wartości jeśli istnieją
+                    if (currentPrimary) {
+                        primarySelect.val(currentPrimary);
+                    }
+                    if (currentSecondary) {
+                        secondarySelect.val(currentSecondary);
+                    }
+
+                    errorMsg.css('color', '#00a32a').text('✅ Załadowano ' + campaigns.length + ' list').show();
+                } else {
+                    errorMsg.text('❌ ' + (response.data.message || 'Nieznany błąd')).show();
+                }
+            },
+            error: function(xhr, status, error) {
+                loadingMsg.hide();
+                btn.prop('disabled', false).text('🔄 Załaduj listy');
+                errorMsg.text('❌ Błąd połączenia: ' + error).show();
+            }
+        });
+    });
+
     // Dodawanie custom field
     $(document).on('click', '.add-custom-field', function() {
         var formId = $(this).data('form-id');
@@ -44,11 +120,19 @@ jQuery(document).ready(function($) {
     });
     // Toggle acceptance field visibility
     window.toggleAcceptanceField = function(radio) {
-        var wrapper = $(radio).closest('.config-field').find('.acceptance-field-wrapper');
+        var card = $(radio).closest('.cf7-gr-form-card');
+        var acceptanceWrapper = card.find('.acceptance-field-wrapper');
+        var dualCampaignWrapper = card.find('.dual-campaign-wrapper');
+
         if (radio.value === 'always') {
-            wrapper.slideUp();
-        } else {
-            wrapper.slideDown();
+            acceptanceWrapper.slideUp();
+            dualCampaignWrapper.slideUp();
+        } else if (radio.value === 'checkbox') {
+            acceptanceWrapper.slideDown();
+            dualCampaignWrapper.slideUp();
+        } else if (radio.value === 'dual') {
+            acceptanceWrapper.slideDown();
+            dualCampaignWrapper.slideDown();
         }
     };
     
