@@ -1,0 +1,545 @@
+<?php
+/**
+ * Plugin Name: CF7 GetResponse Integration
+ * Description: Integracja CF7 z GetResponse - wysyłaj email + custom fields
+ * Version: 3.0
+ * Author: IQ Level
+ */
+
+if (!defined('ABSPATH')) exit;
+
+class CF7_GetResponse_Integration {
+    
+    private $option_name = 'cf7_gr_mappings';
+    
+    public function __construct() {
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_init', array($this, 'handle_save'));
+        add_action('wpcf7_mail_sent', array($this, 'handle_form_submission'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+    }
+    
+    public function add_admin_menu() {
+        add_menu_page(
+            'CF7 GetResponse',
+            'CF7 → GR',
+            'manage_options',
+            'cf7-getresponse',
+            array($this, 'settings_page'),
+            'dashicons-email-alt',
+            80
+        );
+    }
+    
+    public function enqueue_admin_scripts($hook) {
+        if ($hook !== 'toplevel_page_cf7-getresponse') return;
+        
+        wp_enqueue_style('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-style.css', array(), '3.0');
+        wp_enqueue_script('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-script.js', array('jquery'), '3.0', true);
+    }
+    
+    public function handle_save() {
+        if (!isset($_POST['cf7_gr_save']) || !wp_verify_nonce($_POST['cf7_gr_nonce'], 'cf7_gr_save_settings')) {
+            return;
+        }
+        
+        $mappings = array();
+        
+        if (isset($_POST['mappings']) && is_array($_POST['mappings'])) {
+            foreach ($_POST['mappings'] as $form_id => $data) {
+                if (!empty($data['enabled'])) {
+                    
+                    // Custom fields mapping
+                    $custom_fields = array();
+                    if (isset($data['custom_fields']) && is_array($data['custom_fields'])) {
+                        foreach ($data['custom_fields'] as $cf) {
+                            if (!empty($cf['cf7_field']) && !empty($cf['gr_field_id'])) {
+                                $custom_fields[] = array(
+                                    'cf7_field' => sanitize_text_field($cf['cf7_field']),
+                                    'gr_field_id' => sanitize_text_field($cf['gr_field_id']),
+                                    'gr_field_name' => sanitize_text_field($cf['gr_field_name'])
+                                );
+                            }
+                        }
+                    }
+                    
+                    $mode = isset($data['mode']) ? sanitize_text_field($data['mode']) : 'checkbox';
+
+                    $mappings[$form_id] = array(
+                        'enabled' => true,
+                        'api_key' => sanitize_text_field($data['api_key']),
+                        'campaign_id' => sanitize_text_field($data['campaign_id']),
+                        'mode' => $mode,
+                        'acceptance_field' => isset($data['acceptance_field']) ? sanitize_text_field($data['acceptance_field']) : '',
+                        'email_field' => sanitize_text_field($data['email_field']),
+                        'name_field' => isset($data['name_field']) ? sanitize_text_field($data['name_field']) : '',
+                        'custom_fields' => $custom_fields
+                    );
+                }
+            }
+        }
+        
+        update_option($this->option_name, $mappings);
+        
+        add_settings_error(
+            'cf7_gr_messages',
+            'cf7_gr_message',
+            '✅ Ustawienia zapisane!',
+            'updated'
+        );
+    }
+    
+    public function settings_page() {
+        $mappings = get_option($this->option_name, array());
+        
+        $cf7_forms = get_posts(array(
+            'post_type' => 'wpcf7_contact_form',
+            'numberposts' => -1,
+            'orderby' => 'title',
+            'order' => 'ASC'
+        ));
+        
+        settings_errors('cf7_gr_messages');
+        
+        ?>
+        <div class="wrap cf7-gr-wrap">
+            <h1>📧 CF7 → GetResponse Integration</h1>
+            <p class="description">Skonfiguruj automatyczne wysyłanie kontaktów do GetResponse po zaznaczeniu checkboxa</p>
+            
+            <form method="post" action="">
+                <?php wp_nonce_field('cf7_gr_save_settings', 'cf7_gr_nonce'); ?>
+                
+                <div class="cf7-gr-forms">
+                    <?php foreach ($cf7_forms as $form): ?>
+                        <?php
+                        $form_id = $form->ID;
+                        $mapping = isset($mappings[$form_id]) ? $mappings[$form_id] : array();
+                        $enabled = isset($mapping['enabled']) && $mapping['enabled'];
+                        $form_fields = $this->parse_form_fields($form->ID);
+                        ?>
+                        
+                        <div class="cf7-gr-form-card <?php echo $enabled ? 'enabled' : ''; ?>" data-form-id="<?php echo $form_id; ?>">
+                            <div class="form-header">
+                                <label class="form-toggle">
+                                    <input type="checkbox" 
+                                           name="mappings[<?php echo $form_id; ?>][enabled]" 
+                                           value="1" 
+                                           <?php checked($enabled); ?>
+                                           onchange="this.closest('.cf7-gr-form-card').classList.toggle('enabled', this.checked)">
+                                    <span class="toggle-switch"></span>
+                                </label>
+                                
+                                <div class="form-title">
+                                    <h2><?php echo esc_html($form->post_title); ?></h2>
+                                    <div class="form-meta">
+                                        <span class="form-id">ID: <?php echo $form_id; ?></span>
+                                        <?php if ($enabled): ?>
+                                            <span class="form-config-info">
+                                                📧 <?php echo esc_html($mapping['email_field'] ?? 'brak'); ?>
+                                                <?php if (!empty($mapping['custom_fields'])): ?>
+                                                    • <?php echo count($mapping['custom_fields']); ?> custom fields
+                                                <?php endif; ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                
+                                <span class="status-badge">
+                                    <?php echo $enabled ? '✅ Aktywne' : '⚪ Nieaktywne'; ?>
+                                </span>
+                            </div>
+                            
+                            <div class="form-body">
+                                <!-- Podstawowe ustawienia -->
+                                <div class="section">
+                                    <h3>🔧 Podstawowe ustawienia</h3>
+                                    <div class="config-grid">
+                                        <div class="config-field">
+                                            <label>🔑 GetResponse API Key</label>
+                                            <input type="text" 
+                                                   name="mappings[<?php echo $form_id; ?>][api_key]"
+                                                   value="<?php echo esc_attr($mapping['api_key'] ?? ''); ?>"
+                                                   placeholder="Wklej API Key"
+                                                   <?php echo $enabled ? 'required' : ''; ?>>
+                                            <small>GetResponse → Menu → Integracje i API → API</small>
+                                        </div>
+                                        
+                                        <div class="config-field">
+                                            <label>📋 Campaign ID (Lista)</label>
+                                            <input type="text" 
+                                                   name="mappings[<?php echo $form_id; ?>][campaign_id]"
+                                                   value="<?php echo esc_attr($mapping['campaign_id'] ?? ''); ?>"
+                                                   placeholder="np. VaxYZ"
+                                                   <?php echo $enabled ? 'required' : ''; ?>>
+                                            <small>ID listy mailingowej w GetResponse</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Tryb działania -->
+                                <div class="section highlight-section">
+                                    <h3>⚡ Tryb działania</h3>
+                                    <div class="config-field">
+                                        <label>Kiedy wysyłać do GetResponse?</label>
+                                        
+                                        <?php
+                                        $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
+                                        ?>
+                                        
+                                        <label class="radio-option">
+                                            <input type="radio" 
+                                                name="mappings[<?php echo $form_id; ?>][mode]" 
+                                                value="always" 
+                                                <?php checked($mode, 'always'); ?>
+                                                onchange="toggleAcceptanceField(this)">
+                                            <strong>🚀 Zawsze przy wysłaniu formularza</strong>
+                                            <small>Każde wysłanie formularza = automatyczny zapis do GetResponse</small>
+                                        </label>
+                                        
+                                        <label class="radio-option">
+                                            <input type="radio" 
+                                                name="mappings[<?php echo $form_id; ?>][mode]" 
+                                                value="checkbox" 
+                                                <?php checked($mode, 'checkbox'); ?>
+                                                onchange="toggleAcceptanceField(this)">
+                                            <strong>✅ Tylko gdy checkbox/acceptance zaznaczony</strong>
+                                            <small>Użytkownik musi zaznaczyć zgodę</small>
+                                        </label>
+                                        
+                                        <div class="acceptance-field-wrapper" style="margin-top: 20px; <?php echo $mode === 'always' ? 'display:none;' : ''; ?>">
+                                            <label><strong>Pole wyzwalające (checkbox/acceptance):</strong></label>
+                                            <?php if (!empty($form_fields['acceptance'])): ?>
+                                                <select name="mappings[<?php echo $form_id; ?>][acceptance_field]">
+                                                    <option value="">-- Wybierz pole --</option>
+                                                    <?php foreach ($form_fields['acceptance'] as $field): ?>
+                                                        <option value="<?php echo esc_attr($field['name']); ?>"
+                                                                <?php selected($mapping['acceptance_field'] ?? '', $field['name']); ?>>
+                                                            <?php echo esc_html($field['label']); ?> 
+                                                            (<?php echo $field['name']; ?>)
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <small>⚡ Tylko gdy to pole jest zaznaczone, dane zostaną wysłane</small>
+                                            <?php else: ?>
+                                                <p class="no-fields">❌ Brak pól acceptance/checkbox w tym formularzu</p>
+                                                <small>Dodaj: <code>[acceptance newsletter "Zapisz na newsletter"]</code></small>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Standardowe pola -->
+                                <div class="section">
+                                    <h3>📝 Standardowe pola GetResponse</h3>
+                                    <div class="config-grid">
+                                        <div class="config-field">
+                                            <label>📧 Pole Email (wymagane)</label>
+                                            <select name="mappings[<?php echo $form_id; ?>][email_field]" required>
+                                                <?php if (!empty($form_fields['email'])): ?>
+                                                    <?php foreach ($form_fields['email'] as $field): ?>
+                                                        <option value="<?php echo esc_attr($field['name']); ?>"
+                                                                <?php selected($mapping['email_field'] ?? $field['name'], $field['name']); ?>>
+                                                            <?php echo esc_html($field['name']); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                <?php else: ?>
+                                                    <option value="your-email">your-email</option>
+                                                <?php endif; ?>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="config-field">
+                                            <label>👤 Pole Imię (opcjonalne)</label>
+                                            <select name="mappings[<?php echo $form_id; ?>][name_field]">
+                                                <option value="">-- Nie wysyłaj --</option>
+                                                <?php foreach ($form_fields['all'] as $field): ?>
+                                                    <option value="<?php echo esc_attr($field['name']); ?>"
+                                                            <?php selected($mapping['name_field'] ?? '', $field['name']); ?>>
+                                                        <?php echo esc_html($field['name']); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Custom Fields -->
+                                <div class="section">
+                                    <h3>➕ Dodatkowe pola (Custom Fields)</h3>
+                                    <p class="description">Możesz wysłać dodatkowe pola z formularza jako custom fields do GetResponse</p>
+                                    
+                                    <div class="custom-fields-container" data-form-id="<?php echo $form_id; ?>">
+                                        <?php
+                                        $custom_fields = isset($mapping['custom_fields']) ? $mapping['custom_fields'] : array();
+                                        if (empty($custom_fields)) {
+                                            $custom_fields = array(array('cf7_field' => '', 'gr_field_id' => '', 'gr_field_name' => ''));
+                                        }
+                                        foreach ($custom_fields as $idx => $cf):
+                                        ?>
+                                        <div class="custom-field-row">
+                                            <div class="cf-input">
+                                                <label>Pole z CF7:</label>
+                                                <select name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][cf7_field]">
+                                                    <option value="">-- Wybierz pole --</option>
+                                                    <?php foreach ($form_fields['all'] as $field): ?>
+                                                        <option value="<?php echo esc_attr($field['name']); ?>"
+                                                                <?php selected($cf['cf7_field'] ?? '', $field['name']); ?>>
+                                                            <?php echo esc_html($field['name']); ?> (<?php echo $field['type']; ?>)
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            
+                                            <span class="arrow">→</span>
+                                            
+                                            <div class="cf-input">
+                                                <label>Custom Field ID w GR:</label>
+                                                <input type="text" 
+                                                       name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][gr_field_id]"
+                                                       value="<?php echo esc_attr($cf['gr_field_id'] ?? ''); ?>"
+                                                       placeholder="np. pqRst">
+                                            </div>
+                                            
+                                            <div class="cf-input">
+                                                <label>Nazwa (opis):</label>
+                                                <input type="text" 
+                                                       name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][gr_field_name]"
+                                                       value="<?php echo esc_attr($cf['gr_field_name'] ?? ''); ?>"
+                                                       placeholder="np. Telefon">
+                                            </div>
+                                            
+                                            <button type="button" class="button remove-custom-field" title="Usuń">🗑️</button>
+                                        </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    
+                                    <button type="button" class="button add-custom-field" data-form-id="<?php echo $form_id; ?>">
+                                        ➕ Dodaj kolejne pole
+                                    </button>
+                                    
+                                    <div class="help-box">
+                                        <strong>💡 Jak znaleźć Custom Field ID?</strong>
+                                        <ol>
+                                            <li>GetResponse → Kontakty → Własne pola</li>
+                                            <li>Znajdź lub utwórz pole</li>
+                                            <li>Skopiuj ID (np. <code>pqRst</code>)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                                
+                                <!-- Dostępne pola -->
+                                <?php if (!empty($form_fields['all'])): ?>
+                                <details class="field-reference">
+                                    <summary>📋 Wszystkie pola w formularzu (<?php echo count($form_fields['all']); ?>)</summary>
+                                    <ul>
+                                        <?php foreach ($form_fields['all'] as $field): ?>
+                                            <li>
+                                                <code><?php echo esc_html($field['name']); ?></code>
+                                                <span class="field-type"><?php echo $field['type']; ?></span>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </details>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        
+                    <?php endforeach; ?>
+                </div>
+                
+                <div class="cf7-gr-footer">
+                    <?php submit_button('💾 Zapisz wszystkie ustawienia', 'primary large', 'cf7_gr_save'); ?>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Template dla custom fields -->
+        <script type="text/template" id="custom-field-template">
+            <div class="custom-field-row">
+                <div class="cf-input">
+                    <label>Pole z CF7:</label>
+                    <select name="mappings[FORM_ID][custom_fields][INDEX][cf7_field]">
+                        <option value="">-- Wybierz pole --</option>
+                        FIELDS_OPTIONS
+                    </select>
+                </div>
+                <span class="arrow">→</span>
+                <div class="cf-input">
+                    <label>Custom Field ID w GR:</label>
+                    <input type="text" 
+                           name="mappings[FORM_ID][custom_fields][INDEX][gr_field_id]"
+                           placeholder="np. pqRst">
+                </div>
+                <div class="cf-input">
+                    <label>Nazwa (opis):</label>
+                    <input type="text" 
+                           name="mappings[FORM_ID][custom_fields][INDEX][gr_field_name]"
+                           placeholder="np. Telefon">
+                </div>
+                <button type="button" class="button remove-custom-field" title="Usuń">🗑️</button>
+            </div>
+        </script>
+        <?php
+    }
+    
+    private function parse_form_fields($form_id) {
+        $contact_form = WPCF7_ContactForm::get_instance($form_id);
+        if (!$contact_form) return array();
+        
+        $form_content = $contact_form->prop('form');
+        $manager = WPCF7_FormTagsManager::get_instance();
+        $tags = $manager->scan($form_content);
+        
+        $fields = array(
+            'email' => array(),
+            'text' => array(),
+            'acceptance' => array(),
+            'all' => array()
+        );
+        
+        foreach ($tags as $tag) {
+            if (empty($tag->name)) continue;
+            
+            $field = array(
+                'type' => $tag->type,
+                'name' => $tag->name,
+                'label' => $tag->content ?: $tag->name
+            );
+            
+            $fields['all'][] = $field;
+            
+            if ($tag->basetype === 'email') {
+                $fields['email'][] = $field;
+            } elseif ($tag->basetype === 'text') {
+                $fields['text'][] = $field;
+            } elseif (in_array($tag->basetype, array('acceptance', 'checkbox'))) {
+                $fields['acceptance'][] = $field;
+            }
+        }
+        
+        return $fields;
+    }
+    
+    public function handle_form_submission($contact_form) {
+        $mappings = get_option($this->option_name, array());
+        $form_id = $contact_form->id();
+        
+        // Sprawdź czy formularz ma aktywne mapowanie
+        if (!isset($mappings[$form_id]) || !$mappings[$form_id]['enabled']) {
+            return;
+        }
+        
+        $mapping = $mappings[$form_id];
+        $submission = WPCF7_Submission::get_instance();
+        if (!$submission) return;
+        
+        $posted_data = $submission->get_posted_data();
+        
+        // KROK 1: Sprawdź tryb działania
+        $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
+
+        if ($mode === 'checkbox') {
+            // Sprawdź czy pole acceptance/trigger jest zaznaczone
+            $acceptance_field = $mapping['acceptance_field'];
+            if (empty($posted_data[$acceptance_field])) {
+                error_log("CF7→GR [Form {$form_id}]: Pole '{$acceptance_field}' nie zaznaczone - pomijam");
+                return;
+            }
+            error_log("CF7→GR [Form {$form_id}]: Tryb checkbox - pole '{$acceptance_field}' zaznaczone ✓");
+        } else {
+            // Tryb 'always' - zawsze wysyłaj
+            error_log("CF7→GR [Form {$form_id}]: Tryb 'always' - wysyłam bez sprawdzania checkboxa");
+        }
+        
+        // KROK 2: Pobierz email (wymagane)
+        $email = isset($posted_data[$mapping['email_field']]) ? $posted_data[$mapping['email_field']] : '';
+        if (empty($email) || !is_email($email)) {
+            error_log("CF7→GR [Form {$form_id}]: Brak poprawnego emaila");
+            return;
+        }
+        
+        // KROK 3: Pobierz imię (opcjonalne)
+        $name = '';
+        if (!empty($mapping['name_field']) && isset($posted_data[$mapping['name_field']])) {
+            $name = $posted_data[$mapping['name_field']];
+        }
+        
+        // KROK 4: Przygotuj custom fields
+        $custom_fields = array();
+        if (!empty($mapping['custom_fields'])) {
+            foreach ($mapping['custom_fields'] as $cf) {
+                if (empty($cf['cf7_field']) || empty($cf['gr_field_id'])) continue;
+                
+                if (isset($posted_data[$cf['cf7_field']])) {
+                    $value = $posted_data[$cf['cf7_field']];
+                    
+                    // Jeśli to array (checkbox z wieloma wartościami), przekonwertuj
+                    if (is_array($value)) {
+                        $value = implode(', ', $value);
+                    }
+                    
+                    $custom_fields[] = array(
+                        'customFieldId' => $cf['gr_field_id'],
+                        'value' => array($value)
+                    );
+                    
+                    error_log("CF7→GR [Form {$form_id}]: Custom field '{$cf['cf7_field']}' → '{$cf['gr_field_id']}' = '{$value}'");
+                }
+            }
+        }
+        
+        // KROK 5: Wyślij do GetResponse
+        $result = $this->add_to_getresponse(
+            $mapping['api_key'],
+            $mapping['campaign_id'],
+            $email,
+            $name,
+            $custom_fields
+        );
+        
+        if ($result) {
+            error_log("CF7→GR [Form {$form_id}]: ✅ Sukces! Email '{$email}' dodany do listy");
+        } else {
+            error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}'");
+        }
+    }
+    
+    private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array()) {
+        $data = array(
+            'email' => $email,
+            'campaign' => array('campaignId' => $campaign_id)
+        );
+        
+        if (!empty($name)) {
+            $data['name'] = $name;
+        }
+        
+        if (!empty($custom_fields)) {
+            $data['customFieldValues'] = $custom_fields;
+        }
+        
+        $ch = curl_init('https://api.getresponse.com/v3/contacts');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'X-Auth-Token: api-key ' . $api_key,
+            'Content-Type: application/json'
+        ));
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        // Loguj odpowiedź w przypadku błędu
+        if (!in_array($http_code, array(201, 202, 409))) {
+            error_log("CF7→GR API Error [{$http_code}]: " . $response);
+        }
+        
+        return in_array($http_code, array(201, 202, 409));
+    }
+}
+
+new CF7_GetResponse_Integration();
