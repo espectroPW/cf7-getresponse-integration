@@ -1,6 +1,21 @@
+/**
+ * CF7 GetResponse Integration - Admin Scripts
+ *
+ * Handles AJAX campaign loading, dynamic field management,
+ * and UI interactions for the admin settings page.
+ *
+ * @package CF7_GetResponse_Integration
+ * @since 3.0.0
+ */
+
 jQuery(document).ready(function($) {
 
-    // Ładowanie kampanii z GetResponse
+    /**
+     * Load campaigns from GetResponse API via AJAX
+     *
+     * Fetches all available campaigns and populates the select dropdowns
+     * for primary and secondary campaign selection.
+     */
     $(document).on('click', '.load-campaigns-btn', function() {
         var btn = $(this);
         var formId = btn.data('form-id');
@@ -76,7 +91,12 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Dodawanie custom field
+    /**
+     * Add new custom field mapping row
+     *
+     * Clones the custom field template and appends it to the container
+     * with properly updated field names and indices.
+     */
     $(document).on('click', '.add-custom-field', function() {
         var formId = $(this).data('form-id');
         var container = $('.custom-fields-container[data-form-id="' + formId + '"]');
@@ -93,6 +113,13 @@ jQuery(document).ready(function($) {
         
         container.append(template);
     });
+
+    /**
+     * Toggle form card expansion/collapse
+     *
+     * Allows clicking on form header to expand/collapse the form body,
+     * except when clicking on the enable/disable toggle switch.
+     */
     $(document).on('click', '.form-header', function(e) {
         // Nie toggle gdy klikamy w toggle switch lub jego label
         if ($(e.target).closest('.form-toggle').length) {
@@ -104,11 +131,15 @@ jQuery(document).ready(function($) {
         card.find('.form-body').slideToggle(300);
     });
     
-    // Domyślnie zwiń wszystkie formularze przy ładowaniu
+    // Collapse all form cards by default on page load
     $('.cf7-gr-form-card').addClass('collapsed');
     $('.cf7-gr-form-card .form-body').hide();
-    
-    // Usuwanie custom field
+
+    /**
+     * Remove custom field mapping row
+     *
+     * Removes the clicked row and ensures at least one row remains.
+     */
     $(document).on('click', '.remove-custom-field', function() {
         var container = $(this).closest('.custom-fields-container');
         $(this).closest('.custom-field-row').remove();
@@ -118,7 +149,15 @@ jQuery(document).ready(function($) {
             container.closest('.cf7-gr-form-card').find('.add-custom-field').click();
         }
     });
-    // Toggle acceptance field visibility
+
+    /**
+     * Toggle acceptance field and dual campaign wrapper visibility
+     *
+     * Shows/hides the acceptance field selector and secondary campaign field
+     * based on the selected operation mode (always/checkbox/dual).
+     *
+     * @param {HTMLElement} radio The clicked radio button element
+     */
     window.toggleAcceptanceField = function(radio) {
         var card = $(radio).closest('.cf7-gr-form-card');
         var acceptanceWrapper = card.find('.acceptance-field-wrapper');

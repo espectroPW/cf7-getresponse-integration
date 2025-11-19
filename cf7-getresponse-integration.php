@@ -1,29 +1,87 @@
 <?php
 /**
  * Plugin Name: CF7 GetResponse Integration
- * Description: Integracja CF7 z GetResponse - wysyłaj email + custom fields
- * Version: 3.0
- * Author: IQ Level
+ * Plugin URI: https://iql.pl
+ * Description: Professional integration between Contact Form 7 and GetResponse with dual-list support, custom fields mapping, and automatic campaign loading.
+ * Version: 3.1.0
+ * Author: IQLevel vel Espectro
+ * Author URI: https://iql.pl
+ * Text Domain: cf7-getresponse
+ * Domain Path: /languages
+ * Requires at least: 5.0
+ * Requires PHP: 7.0
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ *
+ * @package CF7_GetResponse_Integration
  */
 
-if (!defined('ABSPATH')) exit;
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}
 
+/**
+ * Main plugin class for CF7 GetResponse Integration
+ *
+ * @since 3.0.0
+ */
 class CF7_GetResponse_Integration {
-    
+
+    /**
+     * Option name for storing form mappings
+     *
+     * @var string
+     * @since 3.0.0
+     */
     private $option_name = 'cf7_gr_mappings';
-    
+
+    /**
+     * Plugin version
+     *
+     * @var string
+     * @since 3.1.0
+     */
+    private $version = '3.1.0';
+
+    /**
+     * Constructor - Initialize plugin hooks
+     *
+     * @since 3.0.0
+     */
     public function __construct() {
+        add_action('plugins_loaded', array($this, 'load_textdomain'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'handle_save'));
         add_action('wpcf7_mail_sent', array($this, 'handle_form_submission'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
     }
-    
+
+    /**
+     * Load plugin text domain for translations
+     *
+     * @since 3.1.0
+     * @return void
+     */
+    public function load_textdomain() {
+        load_plugin_textdomain(
+            'cf7-getresponse',
+            false,
+            dirname(plugin_basename(__FILE__)) . '/languages/'
+        );
+    }
+
+    /**
+     * Add admin menu page
+     *
+     * @since 3.0.0
+     * @return void
+     */
     public function add_admin_menu() {
         add_menu_page(
-            'CF7 GetResponse',
-            'CF7 → GR',
+            __('CF7 GetResponse', 'cf7-getresponse'),
+            __('CF7 → GR', 'cf7-getresponse'),
             'manage_options',
             'cf7-getresponse',
             array($this, 'settings_page'),
@@ -31,26 +89,55 @@ class CF7_GetResponse_Integration {
             80
         );
     }
-    
-    public function enqueue_admin_scripts($hook) {
-        if ($hook !== 'toplevel_page_cf7-getresponse') return;
 
-        wp_enqueue_style('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-style.css', array(), '3.0');
-        wp_enqueue_script('cf7-gr-admin', plugin_dir_url(__FILE__) . 'admin-script.js', array('jquery'), '3.0', true);
+    /**
+     * Enqueue admin scripts and styles
+     *
+     * @since 3.0.0
+     * @param string $hook Current admin page hook
+     * @return void
+     */
+    public function enqueue_admin_scripts($hook) {
+        if ($hook !== 'toplevel_page_cf7-getresponse') {
+            return;
+        }
+
+        wp_enqueue_style(
+            'cf7-gr-admin',
+            plugin_dir_url(__FILE__) . 'admin-style.css',
+            array(),
+            $this->version
+        );
+
+        wp_enqueue_script(
+            'cf7-gr-admin',
+            plugin_dir_url(__FILE__) . 'admin-script.js',
+            array('jquery'),
+            $this->version,
+            true
+        );
 
         wp_localize_script('cf7-gr-admin', 'cf7GrAjax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cf7_gr_ajax_nonce')
+            'nonce'    => wp_create_nonce('cf7_gr_ajax_nonce'),
         ));
     }
-    
+
+    /**
+     * Handle form settings save
+     *
+     * @since 3.0.0
+     * @return void
+     */
     public function handle_save() {
+        // Verify nonce
         if (!isset($_POST['cf7_gr_save']) || !wp_verify_nonce($_POST['cf7_gr_nonce'], 'cf7_gr_save_settings')) {
             return;
         }
 
+        // Check user permissions
         if (!current_user_can('manage_options')) {
-            wp_die(__('Brak uprawnień do wykonania tej operacji.'));
+            wp_die(esc_html__('You do not have permission to perform this action.', 'cf7-getresponse'));
         }
         
         $mappings = array();
@@ -91,15 +178,21 @@ class CF7_GetResponse_Integration {
         }
         
         update_option($this->option_name, $mappings);
-        
+
         add_settings_error(
             'cf7_gr_messages',
             'cf7_gr_message',
-            '✅ Ustawienia zapisane!',
+            esc_html__('Settings saved successfully!', 'cf7-getresponse'),
             'updated'
         );
     }
-    
+
+    /**
+     * Render settings page
+     *
+     * @since 3.0.0
+     * @return void
+     */
     public function settings_page() {
         $mappings = get_option($this->option_name, array());
         
@@ -437,7 +530,14 @@ class CF7_GetResponse_Integration {
         </script>
         <?php
     }
-    
+
+    /**
+     * Parse Contact Form 7 fields
+     *
+     * @since 3.0.0
+     * @param int $form_id CF7 form ID
+     * @return array Parsed form fields categorized by type
+     */
     private function parse_form_fields($form_id) {
         $contact_form = WPCF7_ContactForm::get_instance($form_id);
         if (!$contact_form) return array();
@@ -475,7 +575,17 @@ class CF7_GetResponse_Integration {
         
         return $fields;
     }
-    
+
+    /**
+     * Handle Contact Form 7 submission
+     *
+     * Processes form data and sends to GetResponse based on configured settings.
+     * Supports three modes: always, checkbox, and dual.
+     *
+     * @since 3.0.0
+     * @param WPCF7_ContactForm $contact_form CF7 contact form object
+     * @return void
+     */
     public function handle_form_submission($contact_form) {
         $mappings = get_option($this->option_name, array());
         $form_id = $contact_form->id();
@@ -603,7 +713,18 @@ class CF7_GetResponse_Integration {
             }
         }
     }
-    
+
+    /**
+     * Add contact to GetResponse campaign
+     *
+     * @since 3.0.0
+     * @param string $api_key GetResponse API key
+     * @param string $campaign_id GetResponse campaign ID
+     * @param string $email Contact email address
+     * @param string $name Contact name (optional)
+     * @param array  $custom_fields Custom field values (optional)
+     * @return bool True on success, false on failure
+     */
     private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array()) {
         $data = array(
             'email' => $email,
@@ -648,31 +769,50 @@ class CF7_GetResponse_Integration {
         return in_array($http_code, array(201, 202, 409));
     }
 
+    /**
+     * AJAX handler to fetch campaigns from GetResponse
+     *
+     * @since 3.1.0
+     * @return void Sends JSON response
+     */
     public function ajax_get_campaigns() {
         check_ajax_referer('cf7_gr_ajax_nonce', 'nonce');
 
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => 'Brak uprawnień'));
+            wp_send_json_error(array(
+                'message' => esc_html__('Insufficient permissions.', 'cf7-getresponse')
+            ));
             return;
         }
 
         $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
 
         if (empty($api_key)) {
-            wp_send_json_error(array('message' => 'Brak API Key'));
+            wp_send_json_error(array(
+                'message' => esc_html__('API Key is required.', 'cf7-getresponse')
+            ));
             return;
         }
 
         $campaigns = $this->get_campaigns_from_api($api_key);
 
         if ($campaigns === false) {
-            wp_send_json_error(array('message' => 'Błąd podczas pobierania list z GetResponse'));
+            wp_send_json_error(array(
+                'message' => esc_html__('Error fetching campaigns from GetResponse.', 'cf7-getresponse')
+            ));
             return;
         }
 
         wp_send_json_success(array('campaigns' => $campaigns));
     }
 
+    /**
+     * Fetch campaigns from GetResponse API
+     *
+     * @since 3.1.0
+     * @param string $api_key GetResponse API key
+     * @return array|false Array of campaigns on success, false on failure
+     */
     private function get_campaigns_from_api($api_key) {
         $ch = curl_init('https://api.getresponse.com/v3/campaigns');
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(

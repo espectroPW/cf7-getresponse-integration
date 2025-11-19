@@ -1,3 +1,13 @@
+/**
+ * CF7 GetResponse Integration - Admin Styles
+ *
+ * Styles for the plugin admin settings page including
+ * form cards, toggles, campaign selectors, and custom field mapping.
+ *
+ * @package CF7_GetResponse_Integration
+ * @since 3.0.0
+ */
+
 .cf7-gr-wrap {
     max-width: 1400px;
 }

@@ -1,0 +1,34 @@
+# WordPress
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Compiled translation files (should be generated locally)
+languages/*.mo
+
+# Logs
+*.log
+debug.log
+error.log
+
+# Temporary files
+*~
+*.swp
+*.swo
+
+# Node modules (if using build tools)
+node_modules/
+package-lock.json
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+.env.local

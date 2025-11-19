@@ -1,0 +1,196 @@
+# Copyright (C) 2025 IQLevel vel Espectro
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: CF7 GetResponse Integration 3.1.0\n"
+"Report-Msgid-Bugs-To: https://iql.pl\n"
+"POT-Creation-Date: 2025-01-19 12:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: cf7-getresponse-integration.php:68
+msgid "CF7 GetResponse"
+msgstr ""
+
+#: cf7-getresponse-integration.php:69
+msgid "CF7 → GR"
+msgstr ""
+
+#: cf7-getresponse-integration.php:125
+msgid "You do not have permission to perform this action."
+msgstr ""
+
+#: cf7-getresponse-integration.php:170
+msgid "Settings saved successfully!"
+msgstr ""
+
+#: cf7-getresponse-integration.php:562
+msgid "Insufficient permissions."
+msgstr ""
+
+#: cf7-getresponse-integration.php:571
+msgid "API Key is required."
+msgstr ""
+
+#: cf7-getresponse-integration.php:580
+msgid "Error fetching campaigns from GetResponse."
+msgstr ""
+
+# UI Strings
+msgid "Configure automatic sending of contacts to GetResponse"
+msgstr ""
+
+msgid "Basic Settings"
+msgstr ""
+
+msgid "GetResponse API Key"
+msgstr ""
+
+msgid "Paste API Key"
+msgstr ""
+
+msgid "GetResponse → Menu → Integrations and API → API"
+msgstr ""
+
+msgid "Load Lists"
+msgstr ""
+
+msgid "Fetching lists from GetResponse..."
+msgstr ""
+
+msgid "Primary List (contact)"
+msgstr ""
+
+msgid "Secondary List (newsletter)"
+msgstr ""
+
+msgid "Select list first"
+msgstr ""
+
+msgid "Always saved (dual mode) or only list (always/checkbox modes)"
+msgstr ""
+
+msgid "Saved only when checkbox is checked (dual mode)"
+msgstr ""
+
+msgid "Operation Mode"
+msgstr ""
+
+msgid "When to send to GetResponse?"
+msgstr ""
+
+msgid "Always on form submission"
+msgstr ""
+
+msgid "Every form submission = automatic save to GetResponse"
+msgstr ""
+
+msgid "Only when checkbox/acceptance is checked"
+msgstr ""
+
+msgid "User must check consent"
+msgstr ""
+
+msgid "Two lists - depending on consent"
+msgstr ""
+
+msgid "Always save to primary list + additionally to second list if consent checked"
+msgstr ""
+
+msgid "Trigger field (checkbox/acceptance):"
+msgstr ""
+
+msgid "Select field"
+msgstr ""
+
+msgid "Only when this field is checked, data will be sent"
+msgstr ""
+
+msgid "No acceptance/checkbox fields in this form"
+msgstr ""
+
+msgid "Add:"
+msgstr ""
+
+msgid "Standard GetResponse Fields"
+msgstr ""
+
+msgid "Email Field (required)"
+msgstr ""
+
+msgid "Name Field (optional)"
+msgstr ""
+
+msgid "Don't send"
+msgstr ""
+
+msgid "Additional Fields (Custom Fields)"
+msgstr ""
+
+msgid "You can send additional form fields as custom fields to GetResponse"
+msgstr ""
+
+msgid "Field from CF7:"
+msgstr ""
+
+msgid "Custom Field ID in GR:"
+msgstr ""
+
+msgid "Name (description):"
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+msgid "Add another field"
+msgstr ""
+
+msgid "How to find Custom Field ID?"
+msgstr ""
+
+msgid "GetResponse → Contacts → Custom Fields"
+msgstr ""
+
+msgid "Find or create your field"
+msgstr ""
+
+msgid "Copy the ID (e.g."
+msgstr ""
+
+msgid "All fields in the form"
+msgstr ""
+
+msgid "Save all settings"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Inactive"
+msgstr ""
+
+msgid "custom fields"
+msgstr ""
+
+msgid "Enter API Key first"
+msgstr ""
+
+msgid "Loading..."
+msgstr ""
+
+msgid "Loaded"
+msgstr ""
+
+msgid "lists"
+msgstr ""
+
+msgid "Unknown error"
+msgstr ""
+
+msgid "Connection error:"
+msgstr ""

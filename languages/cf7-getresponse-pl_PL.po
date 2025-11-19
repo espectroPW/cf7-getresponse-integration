@@ -1,0 +1,199 @@
+# Translation of CF7 GetResponse Integration in Polish
+# Copyright (C) 2025 IQLevel vel Espectro
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: CF7 GetResponse Integration 3.1.0\n"
+"Report-Msgid-Bugs-To: https://iql.pl\n"
+"POT-Creation-Date: 2025-01-19 12:00+0000\n"
+"PO-Revision-Date: 2025-01-19 12:00+0000\n"
+"Last-Translator: IQLevel vel Espectro\n"
+"Language-Team: Polish\n"
+"Language: pl_PL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Generator: Poedit 3.0\n"
+
+#: cf7-getresponse-integration.php:68
+msgid "CF7 GetResponse"
+msgstr "CF7 GetResponse"
+
+#: cf7-getresponse-integration.php:69
+msgid "CF7 → GR"
+msgstr "CF7 → GR"
+
+#: cf7-getresponse-integration.php:125
+msgid "You do not have permission to perform this action."
+msgstr "Brak uprawnień do wykonania tej operacji."
+
+#: cf7-getresponse-integration.php:170
+msgid "Settings saved successfully!"
+msgstr "Ustawienia zapisane pomyślnie!"
+
+#: cf7-getresponse-integration.php:562
+msgid "Insufficient permissions."
+msgstr "Brak uprawnień."
+
+#: cf7-getresponse-integration.php:571
+msgid "API Key is required."
+msgstr "API Key jest wymagany."
+
+#: cf7-getresponse-integration.php:580
+msgid "Error fetching campaigns from GetResponse."
+msgstr "Błąd podczas pobierania list z GetResponse."
+
+# UI Strings
+msgid "Configure automatic sending of contacts to GetResponse"
+msgstr "Skonfiguruj automatyczne wysyłanie kontaktów do GetResponse"
+
+msgid "Basic Settings"
+msgstr "Podstawowe ustawienia"
+
+msgid "GetResponse API Key"
+msgstr "GetResponse API Key"
+
+msgid "Paste API Key"
+msgstr "Wklej API Key"
+
+msgid "GetResponse → Menu → Integrations and API → API"
+msgstr "GetResponse → Menu → Integracje i API → API"
+
+msgid "Load Lists"
+msgstr "Załaduj listy"
+
+msgid "Fetching lists from GetResponse..."
+msgstr "Pobieranie list z GetResponse..."
+
+msgid "Primary List (contact)"
+msgstr "Lista główna (kontakt)"
+
+msgid "Secondary List (newsletter)"
+msgstr "Lista dodatkowa (newsletter)"
+
+msgid "Select list first"
+msgstr "Najpierw załaduj listy"
+
+msgid "Always saved (dual mode) or only list (always/checkbox modes)"
+msgstr "Zawsze zapisywana (tryb dual) lub jedyna lista (tryby always/checkbox)"
+
+msgid "Saved only when checkbox is checked (dual mode)"
+msgstr "Zapisywana tylko gdy checkbox zaznaczony (tryb dual)"
+
+msgid "Operation Mode"
+msgstr "Tryb działania"
+
+msgid "When to send to GetResponse?"
+msgstr "Kiedy wysyłać do GetResponse?"
+
+msgid "Always on form submission"
+msgstr "Zawsze przy wysłaniu formularza"
+
+msgid "Every form submission = automatic save to GetResponse"
+msgstr "Każde wysłanie formularza = automatyczny zapis do GetResponse"
+
+msgid "Only when checkbox/acceptance is checked"
+msgstr "Tylko gdy checkbox/acceptance zaznaczony"
+
+msgid "User must check consent"
+msgstr "Użytkownik musi zaznaczyć zgodę"
+
+msgid "Two lists - depending on consent"
+msgstr "Dwie listy - zależnie od zgody"
+
+msgid "Always save to primary list + additionally to second list if consent checked"
+msgstr "Zawsze zapisz na listę główną + dodatkowo na drugą listę jeśli zaznaczy zgodę"
+
+msgid "Trigger field (checkbox/acceptance):"
+msgstr "Pole wyzwalające (checkbox/acceptance):"
+
+msgid "Select field"
+msgstr "Wybierz pole"
+
+msgid "Only when this field is checked, data will be sent"
+msgstr "Tylko gdy to pole jest zaznaczone, dane zostaną wysłane"
+
+msgid "No acceptance/checkbox fields in this form"
+msgstr "Brak pól acceptance/checkbox w tym formularzu"
+
+msgid "Add:"
+msgstr "Dodaj:"
+
+msgid "Standard GetResponse Fields"
+msgstr "Standardowe pola GetResponse"
+
+msgid "Email Field (required)"
+msgstr "Pole Email (wymagane)"
+
+msgid "Name Field (optional)"
+msgstr "Pole Imię (opcjonalne)"
+
+msgid "Don't send"
+msgstr "Nie wysyłaj"
+
+msgid "Additional Fields (Custom Fields)"
+msgstr "Dodatkowe pola (Custom Fields)"
+
+msgid "You can send additional form fields as custom fields to GetResponse"
+msgstr "Możesz wysłać dodatkowe pola z formularza jako custom fields do GetResponse"
+
+msgid "Field from CF7:"
+msgstr "Pole z CF7:"
+
+msgid "Custom Field ID in GR:"
+msgstr "Custom Field ID w GR:"
+
+msgid "Name (description):"
+msgstr "Nazwa (opis):"
+
+msgid "Remove"
+msgstr "Usuń"
+
+msgid "Add another field"
+msgstr "Dodaj kolejne pole"
+
+msgid "How to find Custom Field ID?"
+msgstr "Jak znaleźć Custom Field ID?"
+
+msgid "GetResponse → Contacts → Custom Fields"
+msgstr "GetResponse → Kontakty → Własne pola"
+
+msgid "Find or create your field"
+msgstr "Znajdź lub utwórz pole"
+
+msgid "Copy the ID (e.g."
+msgstr "Skopiuj ID (np."
+
+msgid "All fields in the form"
+msgstr "Wszystkie pola w formularzu"
+
+msgid "Save all settings"
+msgstr "Zapisz wszystkie ustawienia"
+
+msgid "Active"
+msgstr "Aktywne"
+
+msgid "Inactive"
+msgstr "Nieaktywne"
+
+msgid "custom fields"
+msgstr "pola niestandardowe"
+
+msgid "Enter API Key first"
+msgstr "Wpisz najpierw API Key"
+
+msgid "Loading..."
+msgstr "Ładowanie..."
+
+msgid "Loaded"
+msgstr "Załadowano"
+
+msgid "lists"
+msgstr "list"
+
+msgid "Unknown error"
+msgstr "Nieznany błąd"
+
+msgid "Connection error:"
+msgstr "Błąd połączenia:"
