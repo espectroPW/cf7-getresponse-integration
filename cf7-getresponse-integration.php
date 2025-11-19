@@ -42,6 +42,10 @@ class CF7_GetResponse_Integration {
         if (!isset($_POST['cf7_gr_save']) || !wp_verify_nonce($_POST['cf7_gr_nonce'], 'cf7_gr_save_settings')) {
             return;
         }
+
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Brak uprawnień do wykonania tej operacji.'));
+        }
         
         $mappings = array();
         
@@ -440,9 +444,9 @@ class CF7_GetResponse_Integration {
 
         if ($mode === 'checkbox') {
             // Sprawdź czy pole acceptance/trigger jest zaznaczone
-            $acceptance_field = $mapping['acceptance_field'];
-            if (empty($posted_data[$acceptance_field])) {
-                error_log("CF7→GR [Form {$form_id}]: Pole '{$acceptance_field}' nie zaznaczone - pomijam");
+            $acceptance_field = isset($mapping['acceptance_field']) ? $mapping['acceptance_field'] : '';
+            if (empty($acceptance_field) || empty($posted_data[$acceptance_field])) {
+                error_log("CF7→GR [Form {$form_id}]: Pole '{$acceptance_field}' nie zaznaczone lub nie skonfigurowane - pomijam");
                 return;
             }
             error_log("CF7→GR [Form {$form_id}]: Tryb checkbox - pole '{$acceptance_field}' zaznaczone ✓");
@@ -528,16 +532,23 @@ class CF7_GetResponse_Integration {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        
+
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
         curl_close($ch);
-        
+
+        // Sprawdź czy wystąpił błąd połączenia
+        if ($response === false) {
+            error_log("CF7→GR cURL Error: " . $curl_error);
+            return false;
+        }
+
         // Loguj odpowiedź w przypadku błędu
         if (!in_array($http_code, array(201, 202, 409))) {
             error_log("CF7→GR API Error [{$http_code}]: " . $response);
         }
-        
+
         return in_array($http_code, array(201, 202, 409));
     }
 }
