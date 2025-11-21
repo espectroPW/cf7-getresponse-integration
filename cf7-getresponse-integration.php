@@ -617,8 +617,18 @@ class CF7_GetResponse_Integration {
         } elseif ($mode === 'dual') {
             // Tryb dual - sprawdź checkbox ale nie przerywaj jeśli nie zaznaczony
             $acceptance_field = isset($mapping['acceptance_field']) ? $mapping['acceptance_field'] : '';
-            $acceptance_checked = !empty($acceptance_field) && !empty($posted_data[$acceptance_field]);
-            error_log("CF7→GR [Form {$form_id}]: Tryb dual - checkbox " . ($acceptance_checked ? 'zaznaczony ✓' : 'NIE zaznaczony'));
+
+            // CF7 acceptance: "1" gdy zaznaczony, brak klucza lub pusty gdy nie zaznaczony
+            $acceptance_checked = false;
+            if (!empty($acceptance_field) && isset($posted_data[$acceptance_field])) {
+                $val = $posted_data[$acceptance_field];
+                // Obsłuż array (checkbox) i string (acceptance)
+                if (is_array($val)) {
+                    $acceptance_checked = !empty($val[0]);
+                } else {
+                    $acceptance_checked = ($val === '1' || $val === 'on' || $val === true);
+                }
+            }
         } else {
             // Tryb 'always' - zawsze wysyłaj
             error_log("CF7→GR [Form {$form_id}]: Tryb 'always' - wysyłam bez sprawdzania checkboxa");
