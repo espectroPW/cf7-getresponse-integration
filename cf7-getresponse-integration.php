@@ -53,7 +53,8 @@ class CF7_GetResponse_Integration {
         add_action('plugins_loaded', array($this, 'load_textdomain'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'handle_save'));
-        add_action('wpcf7_mail_sent', array($this, 'handle_form_submission'));
+        add_action('wpcf7_before_send_mail', array($this, 'handle_form_submission'));
+        add_filter('wpcf7_skip_mail', array($this, 'maybe_skip_mail'), 10, 2);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
     }
@@ -171,6 +172,7 @@ class CF7_GetResponse_Integration {
                         'acceptance_field' => isset($data['acceptance_field']) ? sanitize_text_field($data['acceptance_field']) : '',
                         'email_field' => sanitize_text_field($data['email_field']),
                         'name_field' => isset($data['name_field']) ? sanitize_text_field($data['name_field']) : '',
+                        'skip_mail' => !empty($data['skip_mail']),
                         'custom_fields' => $custom_fields
                     );
                 }
@@ -378,8 +380,18 @@ class CF7_GetResponse_Integration {
                                             <?php endif; ?>
                                         </div>
                                     </div>
+                                    <div class="config-field" style="margin-top: 20px; padding: 15px; background: #fff0f0; border: 1px solid #d63638; border-radius: 6px;">
+                                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                            <input type="checkbox"
+                                                name="mappings[<?php echo $form_id; ?>][skip_mail]"
+                                                value="1"
+                                                <?php checked(!empty($mapping['skip_mail'])); ?>>
+                                            <strong>🚫 Nie wysyłaj emaila z CF7</strong>
+                                        </label>
+                                        <small style="margin-left: 30px;">Formularz pokaże sukces użytkownikowi, dane trafią do GetResponse, ale email do admina nie zostanie wysłany</small>
+                                    </div>
                                 </div>
-                                
+
                                 <!-- Standardowe pola -->
                                 <div class="section">
                                     <h3>📝 Standardowe pola GetResponse</h3>
@@ -580,6 +592,26 @@ class CF7_GetResponse_Integration {
     }
 
     /**
+     * Skip CF7 mail sending if configured
+     *
+     * @since 3.1.1
+     * @param bool $skip_mail Current skip mail value
+     * @param WPCF7_ContactForm $contact_form CF7 contact form object
+     * @return bool
+     */
+    public function maybe_skip_mail($skip_mail, $contact_form) {
+        $mappings = get_option($this->option_name, array());
+        $form_id = $contact_form->id();
+
+        if (isset($mappings[$form_id]) && $mappings[$form_id]['enabled'] && !empty($mappings[$form_id]['skip_mail'])) {
+            error_log("CF7→GR [Form {$form_id}]: Blokowanie wysyłki emaila CF7 (skip_mail włączony)");
+            return true;
+        }
+
+        return $skip_mail;
+    }
+
+    /**
      * Handle Contact Form 7 submission
      *
      * Processes form data and sends to GetResponse based on configured settings.
@@ -592,9 +624,13 @@ class CF7_GetResponse_Integration {
     public function handle_form_submission($contact_form) {
         $mappings = get_option($this->option_name, array());
         $form_id = $contact_form->id();
-        
+        $form_title = $contact_form->title();
+
+        error_log("CF7→GR [Form {$form_id}] '{$form_title}': === Nowa submisja ===");
+
         // Sprawdź czy formularz ma aktywne mapowanie
         if (!isset($mappings[$form_id]) || !$mappings[$form_id]['enabled']) {
+            error_log("CF7→GR [Form {$form_id}]: Brak aktywnego mapowania - pomijam");
             return;
         }
         
@@ -603,7 +639,10 @@ class CF7_GetResponse_Integration {
         if (!$submission) return;
         
         $posted_data = $submission->get_posted_data();
-        
+
+        error_log("CF7→GR [Form {$form_id}]: Tryb: {$mapping['mode']}, Email field: {$mapping['email_field']}, Skip mail: " . (!empty($mapping['skip_mail']) ? 'TAK' : 'NIE'));
+        error_log("CF7→GR [Form {$form_id}]: Posted data keys: " . implode(', ', array_keys($posted_data)));
+
         // KROK 1: Sprawdź tryb działania
         $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
         $acceptance_checked = false;
@@ -729,6 +768,8 @@ class CF7_GetResponse_Integration {
                 error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}'");
             }
         }
+
+        error_log("CF7→GR [Form {$form_id}] '{$form_title}': === Koniec przetwarzania ===");
     }
 
     /**
