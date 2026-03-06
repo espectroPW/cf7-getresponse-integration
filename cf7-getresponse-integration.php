@@ -604,7 +604,6 @@ class CF7_GetResponse_Integration {
         $form_id = $contact_form->id();
 
         if (isset($mappings[$form_id]) && $mappings[$form_id]['enabled'] && !empty($mappings[$form_id]['skip_mail'])) {
-            error_log("CF7→GR [Form {$form_id}]: Blokowanie wysyłki emaila CF7 (skip_mail włączony)");
             return true;
         }
 
@@ -624,13 +623,8 @@ class CF7_GetResponse_Integration {
     public function handle_form_submission($contact_form) {
         $mappings = get_option($this->option_name, array());
         $form_id = $contact_form->id();
-        $form_title = $contact_form->title();
-
-        error_log("CF7→GR [Form {$form_id}] '{$form_title}': === Nowa submisja ===");
-
         // Sprawdź czy formularz ma aktywne mapowanie
         if (!isset($mappings[$form_id]) || !$mappings[$form_id]['enabled']) {
-            error_log("CF7→GR [Form {$form_id}]: Brak aktywnego mapowania - pomijam");
             return;
         }
         
@@ -640,11 +634,6 @@ class CF7_GetResponse_Integration {
         
         $posted_data = $submission->get_posted_data();
 
-        error_log("CF7→GR [Form {$form_id}]: Tryb: {$mapping['mode']}, Email field: {$mapping['email_field']}, Skip mail: " . (!empty($mapping['skip_mail']) ? 'TAK' : 'NIE'));
-        error_log("CF7→GR [Form {$form_id}]: Lista główna: {$mapping['campaign_id']}, Lista dodatkowa: " . ($mapping['campaign_id_secondary'] ?? '(brak)'));
-        error_log("CF7→GR [Form {$form_id}]: Acceptance field: " . ($mapping['acceptance_field'] ?? '(brak)'));
-        error_log("CF7→GR [Form {$form_id}]: Posted data keys: " . implode(', ', array_keys($posted_data)));
-
         // KROK 1: Sprawdź tryb działania
         $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
         $acceptance_checked = false;
@@ -653,10 +642,8 @@ class CF7_GetResponse_Integration {
             // Sprawdź czy pole acceptance/trigger jest zaznaczone
             $acceptance_field = isset($mapping['acceptance_field']) ? $mapping['acceptance_field'] : '';
             if (empty($acceptance_field) || empty($posted_data[$acceptance_field])) {
-                error_log("CF7→GR [Form {$form_id}]: Pole '{$acceptance_field}' nie zaznaczone lub nie skonfigurowane - pomijam");
                 return;
             }
-            error_log("CF7→GR [Form {$form_id}]: Tryb checkbox - pole '{$acceptance_field}' zaznaczone ✓");
             $acceptance_checked = true;
         } elseif ($mode === 'dual') {
             // Tryb dual - sprawdź checkbox ale nie przerywaj jeśli nie zaznaczony
@@ -666,26 +653,19 @@ class CF7_GetResponse_Integration {
             $acceptance_checked = false;
             if (!empty($acceptance_field) && isset($posted_data[$acceptance_field])) {
                 $val = $posted_data[$acceptance_field];
-                error_log("CF7→GR [Form {$form_id}]: Dual - pole '{$acceptance_field}' wartość: " . print_r($val, true));
-                // Obsłuż array (checkbox) i string (acceptance)
                 if (is_array($val)) {
                     $acceptance_checked = !empty($val[0]);
                 } else {
                     $acceptance_checked = !empty($val);
                 }
-            } else {
-                error_log("CF7→GR [Form {$form_id}]: Dual - pole '{$acceptance_field}' brak w posted_data lub puste");
             }
-            error_log("CF7→GR [Form {$form_id}]: Dual - acceptance_checked = " . ($acceptance_checked ? 'TAK' : 'NIE'));
         } else {
             // Tryb 'always' - zawsze wysyłaj
-            error_log("CF7→GR [Form {$form_id}]: Tryb 'always' - wysyłam bez sprawdzania checkboxa");
         }
         
         // KROK 2: Pobierz email (wymagane)
         $email = isset($posted_data[$mapping['email_field']]) ? $posted_data[$mapping['email_field']] : '';
         if (empty($email) || !is_email($email)) {
-            error_log("CF7→GR [Form {$form_id}]: Brak poprawnego emaila");
             return;
         }
         
@@ -714,7 +694,6 @@ class CF7_GetResponse_Integration {
                         'value' => array($value)
                     );
                     
-                    error_log("CF7→GR [Form {$form_id}]: Custom field '{$cf['cf7_field']}' → '{$cf['gr_field_id']}' = '{$value}'");
                 }
             }
         }
@@ -730,10 +709,8 @@ class CF7_GetResponse_Integration {
                 $custom_fields
             );
 
-            if ($result_primary) {
-                error_log("CF7→GR [Form {$form_id}]: ✅ Email '{$email}' dodany do listy głównej ({$mapping['campaign_id']})");
-            } else {
-                error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}' do listy głównej");
+            if (!$result_primary) {
+                error_log("CF7→GR [Form {$form_id}]: Błąd przy dodawaniu '{$email}' do listy głównej ({$mapping['campaign_id']})");
             }
 
             // Jeśli checkbox zaznaczony, zapisz też na drugą listę
@@ -746,13 +723,9 @@ class CF7_GetResponse_Integration {
                     $custom_fields
                 );
 
-                if ($result_secondary) {
-                    error_log("CF7→GR [Form {$form_id}]: ✅ Email '{$email}' dodany też do listy dodatkowej ({$mapping['campaign_id_secondary']})");
-                } else {
-                    error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}' do listy dodatkowej");
+                if (!$result_secondary) {
+                    error_log("CF7→GR [Form {$form_id}]: Błąd przy dodawaniu '{$email}' do listy dodatkowej ({$mapping['campaign_id_secondary']})");
                 }
-            } else {
-                error_log("CF7→GR [Form {$form_id}]: ℹ️ Checkbox nie zaznaczony - pomijam listę dodatkową");
             }
         } else {
             // Tryby: always lub checkbox - standardowa wysyłka
@@ -764,14 +737,10 @@ class CF7_GetResponse_Integration {
                 $custom_fields
             );
 
-            if ($result) {
-                error_log("CF7→GR [Form {$form_id}]: ✅ Sukces! Email '{$email}' dodany do listy");
-            } else {
-                error_log("CF7→GR [Form {$form_id}]: ❌ Błąd przy dodawaniu '{$email}'");
+            if (!$result) {
+                error_log("CF7→GR [Form {$form_id}]: Błąd przy dodawaniu '{$email}' ({$mapping['campaign_id']})");
             }
         }
-
-        error_log("CF7→GR [Form {$form_id}] '{$form_title}': === Koniec przetwarzania ===");
     }
 
     /**
