@@ -3,7 +3,7 @@
  * Plugin Name: CF7 GetResponse Integration
  * Plugin URI: https://iql.pl
  * Description: Professional integration between Contact Form 7 and GetResponse with dual-list support, custom fields mapping, and automatic campaign loading.
- * Version: 3.1.0
+ * Version: 3.1.1
  * Author: IQLevel vel Espectro
  * Author URI: https://iql.pl
  * Text Domain: cf7-getresponse
@@ -42,7 +42,7 @@ class CF7_GetResponse_Integration {
      * @var string
      * @since 3.1.0
      */
-    private $version = '3.1.0';
+    private $version = '3.1.1';
 
     /**
      * Constructor - Initialize plugin hooks
@@ -279,6 +279,9 @@ class CF7_GetResponse_Integration {
                                         <div class="campaigns-error" style="display: none; margin-top: 10px; color: #d63638;"></div>
                                     </div>
 
+                                        <?php
+                                    $mode = isset($mapping['mode']) ? $mapping['mode'] : 'checkbox';
+                                    ?>
                                     <div class="config-grid">
                                         <div class="config-field campaign-select-wrapper">
                                             <label>📋 Lista główna (kontakt)</label>
@@ -622,13 +625,17 @@ class CF7_GetResponse_Integration {
             $acceptance_checked = false;
             if (!empty($acceptance_field) && isset($posted_data[$acceptance_field])) {
                 $val = $posted_data[$acceptance_field];
+                error_log("CF7→GR [Form {$form_id}]: Dual - pole '{$acceptance_field}' wartość: " . print_r($val, true));
                 // Obsłuż array (checkbox) i string (acceptance)
                 if (is_array($val)) {
                     $acceptance_checked = !empty($val[0]);
                 } else {
-                    $acceptance_checked = ($val === '1' || $val === 'on' || $val === true);
+                    $acceptance_checked = !empty($val);
                 }
+            } else {
+                error_log("CF7→GR [Form {$form_id}]: Dual - pole '{$acceptance_field}' brak w posted_data lub puste");
             }
+            error_log("CF7→GR [Form {$form_id}]: Dual - acceptance_checked = " . ($acceptance_checked ? 'TAK' : 'NIE'));
         } else {
             // Tryb 'always' - zawsze wysyłaj
             error_log("CF7→GR [Form {$form_id}]: Tryb 'always' - wysyłam bez sprawdzania checkboxa");
