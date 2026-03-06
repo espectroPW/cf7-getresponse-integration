@@ -641,6 +641,8 @@ class CF7_GetResponse_Integration {
         $posted_data = $submission->get_posted_data();
 
         error_log("CF7→GR [Form {$form_id}]: Tryb: {$mapping['mode']}, Email field: {$mapping['email_field']}, Skip mail: " . (!empty($mapping['skip_mail']) ? 'TAK' : 'NIE'));
+        error_log("CF7→GR [Form {$form_id}]: Lista główna: {$mapping['campaign_id']}, Lista dodatkowa: " . ($mapping['campaign_id_secondary'] ?? '(brak)'));
+        error_log("CF7→GR [Form {$form_id}]: Acceptance field: " . ($mapping['acceptance_field'] ?? '(brak)'));
         error_log("CF7→GR [Form {$form_id}]: Posted data keys: " . implode(', ', array_keys($posted_data)));
 
         // KROK 1: Sprawdź tryb działania
