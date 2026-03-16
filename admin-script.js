@@ -92,6 +92,87 @@ jQuery(document).ready(function($) {
     });
 
     /**
+     * Load custom fields from GetResponse API via AJAX
+     */
+    $(document).on('click', '.load-custom-fields-btn', function() {
+        var btn = $(this);
+        var formId = btn.data('form-id');
+        var card = btn.closest('.cf7-gr-form-card');
+        var apiKey = card.find('.api-key-input').val().trim();
+        var loadingMsg = card.find('.custom-fields-loading');
+        var statusMsg = card.find('.custom-fields-status');
+
+        loadingMsg.hide();
+        statusMsg.hide().text('');
+
+        if (!apiKey) {
+            statusMsg.css('color', '#d63638').text('❌ Wpisz najpierw API Key').show();
+            return;
+        }
+
+        btn.prop('disabled', true);
+        loadingMsg.show();
+
+        $.ajax({
+            url: cf7GrAjax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cf7_gr_get_custom_fields',
+                nonce: cf7GrAjax.nonce,
+                api_key: apiKey
+            },
+            success: function(response) {
+                loadingMsg.hide();
+                btn.prop('disabled', false);
+
+                if (response.success && response.data.custom_fields) {
+                    var fields = response.data.custom_fields;
+
+                    // Zapisz pola w data atrybucie karty
+                    card.data('gr-custom-fields', fields);
+
+                    // Wypełnij wszystkie selecty custom fields w tej karcie
+                    card.find('.gr-custom-field-select').each(function() {
+                        var select = $(this);
+                        var currentVal = select.val();
+
+                        select.html('<option value="">-- Wybierz pole GR --</option>');
+                        fields.forEach(function(field) {
+                            var label = field.name + ' (' + field.id + ')';
+                            if (field.type) {
+                                label += ' [' + field.type + ']';
+                            }
+                            select.append('<option value="' + field.id + '" data-name="' + field.name + '">' + label + '</option>');
+                        });
+
+                        if (currentVal) {
+                            select.val(currentVal);
+                        }
+                    });
+
+                    statusMsg.css('color', '#00a32a').text('✅ Załadowano ' + fields.length + ' pól').show();
+                } else {
+                    statusMsg.css('color', '#d63638').text('❌ ' + (response.data.message || 'Nieznany błąd')).show();
+                }
+            },
+            error: function(xhr, status, error) {
+                loadingMsg.hide();
+                btn.prop('disabled', false);
+                statusMsg.css('color', '#d63638').text('❌ Błąd połączenia: ' + error).show();
+            }
+        });
+    });
+
+    /**
+     * Update hidden gr_field_name when GR custom field select changes
+     */
+    $(document).on('change', '.gr-custom-field-select', function() {
+        var selectedOption = $(this).find('option:selected');
+        var name = selectedOption.data('name') || '';
+        $(this).closest('.custom-field-row').find('.gr-custom-field-name').val(name);
+    });
+
+    /**
      * Add new custom field mapping row
      *
      * Clones the custom field template and appends it to the container
@@ -102,15 +183,23 @@ jQuery(document).ready(function($) {
         var container = $('.custom-fields-container[data-form-id="' + formId + '"]');
         var template = $('#custom-field-template').html();
         var currentRows = container.find('.custom-field-row').length;
-        
-        // Pobierz opcje pól dla tego formularza
-        var firstSelect = container.find('select').first();
-        var fieldsOptions = firstSelect.html();
-        
+
+        // Pobierz opcje pól CF7 dla tego formularza
+        var firstCf7Select = container.find('select[name*="cf7_field"]').first();
+        var fieldsOptions = firstCf7Select.html();
+
+        // Pobierz opcje pól GR (jeśli załadowane)
+        var grFieldsOptions = '';
+        var firstGrSelect = container.find('.gr-custom-field-select').first();
+        if (firstGrSelect.find('option').length > 1) {
+            grFieldsOptions = firstGrSelect.html();
+        }
+
         template = template.replace(/FORM_ID/g, formId);
         template = template.replace(/INDEX/g, currentRows);
         template = template.replace('FIELDS_OPTIONS', fieldsOptions);
-        
+        template = template.replace('GR_FIELDS_OPTIONS', grFieldsOptions);
+
         container.append(template);
     });
 

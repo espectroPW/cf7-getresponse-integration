@@ -57,6 +57,7 @@ class CF7_GetResponse_Integration {
         add_filter('wpcf7_skip_mail', array($this, 'maybe_skip_mail'), 10, 2);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
+        add_action('wp_ajax_cf7_gr_get_custom_fields', array($this, 'ajax_get_custom_fields'));
     }
 
     /**
@@ -431,7 +432,17 @@ class CF7_GetResponse_Integration {
                                 <div class="section">
                                     <h3>➕ Dodatkowe pola (Custom Fields)</h3>
                                     <p class="description">Możesz wysłać dodatkowe pola z formularza jako custom fields do GetResponse</p>
-                                    
+
+                                    <div style="margin-bottom: 15px;">
+                                        <button type="button" class="button load-custom-fields-btn" data-form-id="<?php echo $form_id; ?>">
+                                            🔄 Załaduj pola z GetResponse
+                                        </button>
+                                        <span class="custom-fields-loading" style="display: none; margin-left: 10px; color: #2271b1;">
+                                            ⏳ Pobieranie pól...
+                                        </span>
+                                        <span class="custom-fields-status" style="display: none; margin-left: 10px;"></span>
+                                    </div>
+
                                     <div class="custom-fields-container" data-form-id="<?php echo $form_id; ?>">
                                         <?php
                                         $custom_fields = isset($mapping['custom_fields']) ? $mapping['custom_fields'] : array();
@@ -453,42 +464,35 @@ class CF7_GetResponse_Integration {
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            
+
                                             <span class="arrow">→</span>
-                                            
+
                                             <div class="cf-input">
-                                                <label>Custom Field ID w GR:</label>
-                                                <input type="text" 
-                                                       name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][gr_field_id]"
-                                                       value="<?php echo esc_attr($cf['gr_field_id'] ?? ''); ?>"
-                                                       placeholder="np. pqRst">
-                                            </div>
-                                            
-                                            <div class="cf-input">
-                                                <label>Nazwa (opis):</label>
-                                                <input type="text" 
+                                                <label>Pole w GetResponse:</label>
+                                                <select class="gr-custom-field-select"
+                                                        name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][gr_field_id]"
+                                                        data-form-id="<?php echo $form_id; ?>">
+                                                    <option value="">-- Załaduj pola --</option>
+                                                    <?php if (!empty($cf['gr_field_id'])): ?>
+                                                        <option value="<?php echo esc_attr($cf['gr_field_id']); ?>" selected>
+                                                            <?php echo esc_html($cf['gr_field_name'] ?: $cf['gr_field_id']); ?> (<?php echo esc_html($cf['gr_field_id']); ?>)
+                                                        </option>
+                                                    <?php endif; ?>
+                                                </select>
+                                                <input type="hidden"
+                                                       class="gr-custom-field-name"
                                                        name="mappings[<?php echo $form_id; ?>][custom_fields][<?php echo $idx; ?>][gr_field_name]"
-                                                       value="<?php echo esc_attr($cf['gr_field_name'] ?? ''); ?>"
-                                                       placeholder="np. Telefon">
+                                                       value="<?php echo esc_attr($cf['gr_field_name'] ?? ''); ?>">
                                             </div>
-                                            
+
                                             <button type="button" class="button remove-custom-field" title="Usuń">🗑️</button>
                                         </div>
                                         <?php endforeach; ?>
                                     </div>
-                                    
+
                                     <button type="button" class="button add-custom-field" data-form-id="<?php echo $form_id; ?>">
                                         ➕ Dodaj kolejne pole
                                     </button>
-                                    
-                                    <div class="help-box">
-                                        <strong>💡 Jak znaleźć Custom Field ID?</strong>
-                                        <ol>
-                                            <li>GetResponse → Kontakty → Własne pola</li>
-                                            <li>Znajdź lub utwórz pole</li>
-                                            <li>Skopiuj ID (np. <code>pqRst</code>)</li>
-                                        </ol>
-                                    </div>
                                 </div>
                                 
                                 <!-- Dostępne pola -->
@@ -529,16 +533,17 @@ class CF7_GetResponse_Integration {
                 </div>
                 <span class="arrow">→</span>
                 <div class="cf-input">
-                    <label>Custom Field ID w GR:</label>
-                    <input type="text" 
-                           name="mappings[FORM_ID][custom_fields][INDEX][gr_field_id]"
-                           placeholder="np. pqRst">
-                </div>
-                <div class="cf-input">
-                    <label>Nazwa (opis):</label>
-                    <input type="text" 
+                    <label>Pole w GetResponse:</label>
+                    <select class="gr-custom-field-select"
+                            name="mappings[FORM_ID][custom_fields][INDEX][gr_field_id]"
+                            data-form-id="FORM_ID">
+                        <option value="">-- Załaduj pola --</option>
+                        GR_FIELDS_OPTIONS
+                    </select>
+                    <input type="hidden"
+                           class="gr-custom-field-name"
                            name="mappings[FORM_ID][custom_fields][INDEX][gr_field_name]"
-                           placeholder="np. Telefon">
+                           value="">
                 </div>
                 <button type="button" class="button remove-custom-field" title="Usuń">🗑️</button>
             </div>
@@ -882,6 +887,101 @@ class CF7_GetResponse_Integration {
         }
 
         return $campaigns;
+    }
+
+    /**
+     * AJAX handler to fetch custom fields from GetResponse
+     *
+     * @since 3.2.0
+     * @return void Sends JSON response
+     */
+    public function ajax_get_custom_fields() {
+        check_ajax_referer('cf7_gr_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array(
+                'message' => esc_html__('Insufficient permissions.', 'cf7-getresponse')
+            ));
+            return;
+        }
+
+        $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
+
+        if (empty($api_key)) {
+            wp_send_json_error(array(
+                'message' => esc_html__('API Key is required.', 'cf7-getresponse')
+            ));
+            return;
+        }
+
+        $custom_fields = $this->get_custom_fields_from_api($api_key);
+
+        if ($custom_fields === false) {
+            wp_send_json_error(array(
+                'message' => esc_html__('Error fetching custom fields from GetResponse.', 'cf7-getresponse')
+            ));
+            return;
+        }
+
+        wp_send_json_success(array('custom_fields' => $custom_fields));
+    }
+
+    /**
+     * Fetch custom fields from GetResponse API
+     *
+     * @since 3.2.0
+     * @param string $api_key GetResponse API key
+     * @return array|false Array of custom fields on success, false on failure
+     */
+    private function get_custom_fields_from_api($api_key) {
+        $all_fields = array();
+        $page = 1;
+        $per_page = 100;
+
+        do {
+            $url = 'https://api.getresponse.com/v3/custom-fields?page=' . $page . '&perPage=' . $per_page;
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'X-Auth-Token: api-key ' . $api_key,
+                'Content-Type: application/json'
+            ));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            curl_close($ch);
+
+            if ($response === false) {
+                error_log("CF7→GR API Error (get custom fields): " . $curl_error);
+                return false;
+            }
+
+            if ($http_code !== 200) {
+                error_log("CF7→GR API Error (get custom fields) [{$http_code}]: " . $response);
+                return false;
+            }
+
+            $fields_data = json_decode($response, true);
+            if (!is_array($fields_data)) {
+                return false;
+            }
+
+            foreach ($fields_data as $field) {
+                $all_fields[] = array(
+                    'id' => $field['customFieldId'],
+                    'name' => $field['name'],
+                    'type' => isset($field['fieldType']) ? $field['fieldType'] : '',
+                    'format' => isset($field['format']) ? $field['format'] : '',
+                );
+            }
+
+            $page++;
+        } while (count($fields_data) === $per_page);
+
+        return $all_fields;
     }
 }
 
