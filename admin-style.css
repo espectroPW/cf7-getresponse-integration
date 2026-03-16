@@ -193,14 +193,22 @@
 }
 
 .custom-field-row {
-    display: grid;
-    grid-template-columns: 2fr 40px 3fr 50px;
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
-    align-items: end;
+    align-items: flex-end;
     padding: 15px;
     background: #f9f9f9;
     border-radius: 6px;
     border: 1px solid #ddd;
+}
+
+.custom-field-row .cf-input:first-child {
+    flex: 1 1 250px;
+}
+
+.custom-field-row .cf-input:last-of-type {
+    flex: 2 1 300px;
 }
 
 .cf-input {
@@ -240,10 +248,12 @@
     color: #2271b1;
     text-align: center;
     padding-bottom: 8px;
+    flex: 0 0 30px;
 }
 
 .remove-custom-field {
     height: 38px;
+    flex: 0 0 40px;
     cursor: pointer;
 }
 
