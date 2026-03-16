@@ -3,7 +3,7 @@
  * Plugin Name: CF7 GetResponse Integration
  * Plugin URI: https://iql.pl
  * Description: Professional integration between Contact Form 7 and GetResponse with dual-list support, custom fields mapping, and automatic campaign loading.
- * Version: 3.1.1
+ * Version: 3.2.0
  * Author: IQLevel vel Espectro
  * Author URI: https://iql.pl
  * Text Domain: cf7-getresponse
@@ -42,7 +42,23 @@ class CF7_GetResponse_Integration {
      * @var string
      * @since 3.1.0
      */
-    private $version = '3.1.1';
+    private $version = '3.2.0';
+
+    /**
+     * Option name for storing logs
+     *
+     * @var string
+     * @since 3.2.0
+     */
+    private $log_option = 'cf7_gr_logs';
+
+    /**
+     * Maximum number of log entries to keep
+     *
+     * @var int
+     * @since 3.2.0
+     */
+    private $max_logs = 200;
 
     /**
      * Constructor - Initialize plugin hooks
@@ -58,6 +74,7 @@ class CF7_GetResponse_Integration {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
         add_action('wp_ajax_cf7_gr_get_custom_fields', array($this, 'ajax_get_custom_fields'));
+        add_action('wp_ajax_cf7_gr_clear_logs', array($this, 'ajax_clear_logs'));
     }
 
     /**
@@ -90,6 +107,24 @@ class CF7_GetResponse_Integration {
             'dashicons-email-alt',
             80
         );
+
+        add_submenu_page(
+            'cf7-getresponse',
+            __('Ustawienia', 'cf7-getresponse'),
+            __('Ustawienia', 'cf7-getresponse'),
+            'manage_options',
+            'cf7-getresponse',
+            array($this, 'settings_page')
+        );
+
+        add_submenu_page(
+            'cf7-getresponse',
+            __('Logi', 'cf7-getresponse'),
+            __('📋 Logi', 'cf7-getresponse'),
+            'manage_options',
+            'cf7-getresponse-logs',
+            array($this, 'logs_page')
+        );
     }
 
     /**
@@ -100,7 +135,7 @@ class CF7_GetResponse_Integration {
      * @return void
      */
     public function enqueue_admin_scripts($hook) {
-        if ($hook !== 'toplevel_page_cf7-getresponse') {
+        if ($hook !== 'toplevel_page_cf7-getresponse' && $hook !== 'cf7-gr_page_cf7-getresponse-logs') {
             return;
         }
 
@@ -711,7 +746,8 @@ class CF7_GetResponse_Integration {
                 $mapping['campaign_id'],
                 $email,
                 $name,
-                $custom_fields
+                $custom_fields,
+                $form_id
             );
 
             if (!$result_primary) {
@@ -725,7 +761,8 @@ class CF7_GetResponse_Integration {
                     $mapping['campaign_id_secondary'],
                     $email,
                     $name,
-                    $custom_fields
+                    $custom_fields,
+                    $form_id
                 );
 
                 if (!$result_secondary) {
@@ -739,7 +776,8 @@ class CF7_GetResponse_Integration {
                 $mapping['campaign_id'],
                 $email,
                 $name,
-                $custom_fields
+                $custom_fields,
+                $form_id
             );
 
             if (!$result) {
@@ -759,27 +797,29 @@ class CF7_GetResponse_Integration {
      * @param array  $custom_fields Custom field values (optional)
      * @return bool True on success, false on failure
      */
-    private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array()) {
+    private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array(), $form_id = 0) {
         $data = array(
             'email' => $email,
             'campaign' => array('campaignId' => $campaign_id)
         );
-        
+
         if (!empty($name)) {
             $data['name'] = $name;
         }
-        
+
         if (!empty($custom_fields)) {
             $data['customFieldValues'] = $custom_fields;
         }
-        
+
+        $json_data = json_encode($data);
+
         $ch = curl_init('https://api.getresponse.com/v3/contacts');
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             'X-Auth-Token: api-key ' . $api_key,
             'Content-Type: application/json'
         ));
         curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -789,18 +829,197 @@ class CF7_GetResponse_Integration {
         $curl_error = curl_error($ch);
         curl_close($ch);
 
-        // Sprawdź czy wystąpił błąd połączenia
+        $success = in_array($http_code, array(201, 202, 409));
+
+        // Loguj do wp_options
+        $log_entry = array(
+            'time'        => current_time('mysql'),
+            'form_id'     => $form_id,
+            'email'       => $email,
+            'name'        => $name,
+            'campaign_id' => $campaign_id,
+            'request'     => $data,
+            'http_code'   => $http_code,
+            'response'    => $response !== false ? json_decode($response, true) : null,
+            'curl_error'  => $curl_error ?: null,
+            'success'     => $success,
+        );
+        $this->save_log($log_entry);
+
         if ($response === false) {
             error_log("CF7→GR cURL Error: " . $curl_error);
             return false;
         }
 
-        // Loguj odpowiedź w przypadku błędu
-        if (!in_array($http_code, array(201, 202, 409))) {
+        if (!$success) {
             error_log("CF7→GR API Error [{$http_code}]: " . $response);
         }
 
-        return in_array($http_code, array(201, 202, 409));
+        return $success;
+    }
+
+    /**
+     * Save a log entry
+     *
+     * @since 3.2.0
+     * @param array $entry Log entry data
+     * @return void
+     */
+    private function save_log($entry) {
+        $logs = get_option($this->log_option, array());
+        array_unshift($logs, $entry);
+
+        if (count($logs) > $this->max_logs) {
+            $logs = array_slice($logs, 0, $this->max_logs);
+        }
+
+        update_option($this->log_option, $logs, false);
+    }
+
+    /**
+     * AJAX handler to clear logs
+     *
+     * @since 3.2.0
+     * @return void
+     */
+    public function ajax_clear_logs() {
+        check_ajax_referer('cf7_gr_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error();
+            return;
+        }
+
+        delete_option($this->log_option);
+        wp_send_json_success();
+    }
+
+    /**
+     * Render logs page
+     *
+     * @since 3.2.0
+     * @return void
+     */
+    public function logs_page() {
+        $logs = get_option($this->log_option, array());
+        ?>
+        <div class="wrap cf7-gr-wrap">
+            <h1>📋 CF7 → GetResponse Logi</h1>
+            <p class="description">Historia wysyłek do GetResponse API (ostatnie <?php echo $this->max_logs; ?> wpisów)</p>
+
+            <div style="margin: 20px 0; display: flex; gap: 10px; align-items: center;">
+                <button type="button" class="button" id="cf7-gr-clear-logs">🗑️ Wyczyść logi</button>
+                <button type="button" class="button" onclick="location.reload()">🔄 Odśwież</button>
+                <span style="margin-left: auto; color: #666;">
+                    <?php echo count($logs); ?> wpisów
+                </span>
+            </div>
+
+            <?php if (empty($logs)): ?>
+                <div style="padding: 40px; text-align: center; background: #fff; border: 1px solid #ddd; border-radius: 8px;">
+                    <p style="font-size: 16px; color: #666;">Brak logów. Logi pojawią się po wysłaniu formularza.</p>
+                </div>
+            <?php else: ?>
+                <table class="widefat striped" style="border-radius: 8px; overflow: hidden;">
+                    <thead>
+                        <tr>
+                            <th style="width: 150px;">Data</th>
+                            <th style="width: 60px;">Form</th>
+                            <th style="width: 80px;">Status</th>
+                            <th>Email</th>
+                            <th>Imię</th>
+                            <th>Kampania</th>
+                            <th>Custom Fields</th>
+                            <th>Odpowiedź API</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($logs as $log): ?>
+                            <?php
+                            $status_icon = $log['success'] ? '✅' : '❌';
+                            $status_color = $log['success'] ? '#00a32a' : '#d63638';
+                            $http_code = isset($log['http_code']) ? $log['http_code'] : '?';
+
+                            $status_label = $http_code;
+                            if ($http_code == 201) $status_label = '201 Created';
+                            elseif ($http_code == 202) $status_label = '202 Accepted';
+                            elseif ($http_code == 409) $status_label = '409 Exists';
+
+                            $cf_summary = '';
+                            if (!empty($log['request']['customFieldValues'])) {
+                                $parts = array();
+                                foreach ($log['request']['customFieldValues'] as $cfv) {
+                                    $val = is_array($cfv['value']) ? implode(', ', $cfv['value']) : $cfv['value'];
+                                    $parts[] = $cfv['customFieldId'] . ': ' . mb_strimwidth($val, 0, 30, '…');
+                                }
+                                $cf_summary = implode('; ', $parts);
+                            }
+
+                            $response_text = '';
+                            if (!empty($log['curl_error'])) {
+                                $response_text = 'cURL: ' . $log['curl_error'];
+                            } elseif (!$log['success'] && !empty($log['response'])) {
+                                $resp = $log['response'];
+                                $response_text = isset($resp['message']) ? $resp['message'] : json_encode($resp);
+                            }
+                            ?>
+                            <tr>
+                                <td><code style="font-size: 12px;"><?php echo esc_html($log['time']); ?></code></td>
+                                <td><strong>#<?php echo esc_html($log['form_id']); ?></strong></td>
+                                <td>
+                                    <span style="color: <?php echo $status_color; ?>; font-weight: 600;">
+                                        <?php echo $status_icon; ?> <?php echo esc_html($status_label); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo esc_html($log['email']); ?></td>
+                                <td><?php echo esc_html($log['name'] ?: '—'); ?></td>
+                                <td><code style="font-size: 11px;"><?php echo esc_html($log['campaign_id']); ?></code></td>
+                                <td>
+                                    <?php if ($cf_summary): ?>
+                                        <small title="<?php echo esc_attr($cf_summary); ?>"><?php echo esc_html(mb_strimwidth($cf_summary, 0, 50, '…')); ?></small>
+                                    <?php else: ?>
+                                        <span style="color: #999;">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ($response_text): ?>
+                                        <small style="color: #d63638;"><?php echo esc_html(mb_strimwidth($response_text, 0, 60, '…')); ?></small>
+                                    <?php else: ?>
+                                        <span style="color: #999;">OK</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+
+        <script>
+        jQuery(document).ready(function($) {
+            $('#cf7-gr-clear-logs').on('click', function() {
+                if (!confirm('Na pewno wyczyścić wszystkie logi?')) return;
+                var btn = $(this);
+                btn.prop('disabled', true).text('⏳ Czyszczenie...');
+                $.ajax({
+                    url: cf7GrAjax.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'cf7_gr_clear_logs',
+                        nonce: cf7GrAjax.nonce
+                    },
+                    success: function() {
+                        location.reload();
+                    },
+                    error: function() {
+                        btn.prop('disabled', false).text('🗑️ Wyczyść logi');
+                        alert('Błąd przy czyszczeniu logów');
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
     }
 
     /**

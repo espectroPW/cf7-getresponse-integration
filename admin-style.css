@@ -194,7 +194,7 @@
 
 .custom-field-row {
     display: grid;
-    grid-template-columns: 2fr 40px 1.5fr 1.5fr 50px;
+    grid-template-columns: 2fr 40px 3fr 50px;
     gap: 10px;
     align-items: end;
     padding: 15px;
