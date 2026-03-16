@@ -206,6 +206,14 @@
 .cf-input {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.custom-field-row .cf-input select.gr-custom-field-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 200px;
 }
 
 .cf-input label {
@@ -221,7 +229,11 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 13px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
+
 
 .arrow {
     font-size: 20px;

@@ -950,9 +950,9 @@ class CF7_GetResponse_Integration {
                                 $parts = array();
                                 foreach ($log['request']['customFieldValues'] as $cfv) {
                                     $val = is_array($cfv['value']) ? implode(', ', $cfv['value']) : $cfv['value'];
-                                    $parts[] = $cfv['customFieldId'] . ': ' . mb_strimwidth($val, 0, 30, '…');
+                                    $parts[] = $cfv['customFieldId'] . ': ' . $val;
                                 }
-                                $cf_summary = implode('; ', $parts);
+                                $cf_summary = implode("\n", $parts);
                             }
 
                             $response_text = '';
@@ -976,7 +976,7 @@ class CF7_GetResponse_Integration {
                                 <td><code style="font-size: 11px;"><?php echo esc_html($log['campaign_id']); ?></code></td>
                                 <td>
                                     <?php if ($cf_summary): ?>
-                                        <small title="<?php echo esc_attr($cf_summary); ?>"><?php echo esc_html(mb_strimwidth($cf_summary, 0, 50, '…')); ?></small>
+                                        <small style="white-space: pre-line;"><?php echo esc_html($cf_summary); ?></small>
                                     <?php else: ?>
                                         <span style="color: #999;">—</span>
                                     <?php endif; ?>

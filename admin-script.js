@@ -224,6 +224,15 @@ jQuery(document).ready(function($) {
     $('.cf7-gr-form-card').addClass('collapsed');
     $('.cf7-gr-form-card .form-body').hide();
 
+    // Auto-load GR custom fields for cards that have API key saved
+    $('.cf7-gr-form-card.enabled').each(function() {
+        var card = $(this);
+        var apiKey = card.find('.api-key-input').val().trim();
+        if (apiKey && card.find('.gr-custom-field-select').length) {
+            card.find('.load-custom-fields-btn').trigger('click');
+        }
+    });
+
     /**
      * Remove custom field mapping row
      *
