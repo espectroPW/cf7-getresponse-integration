@@ -3,7 +3,7 @@
  * Plugin Name: CF7 GetResponse Integration
  * Plugin URI: https://iql.pl
  * Description: Professional integration between Contact Form 7 and GetResponse with dual-list support, custom fields mapping, and automatic campaign loading.
- * Version: 3.4.0
+ * Version: 3.5.0
  * Author: IQLevel vel Espectro
  * Author URI: https://iql.pl
  * Text Domain: cf7-getresponse
@@ -42,7 +42,7 @@ class CF7_GetResponse_Integration {
      * @var string
      * @since 3.1.0
      */
-    private $version = '3.4.0';
+    private $version = '3.5.0';
 
     /**
      * Option name for storing logs
@@ -74,7 +74,6 @@ class CF7_GetResponse_Integration {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('wp_ajax_cf7_gr_get_campaigns', array($this, 'ajax_get_campaigns'));
         add_action('wp_ajax_cf7_gr_get_custom_fields', array($this, 'ajax_get_custom_fields'));
-        add_action('wp_ajax_cf7_gr_get_gdpr_fields', array($this, 'ajax_get_gdpr_fields'));
         add_action('wp_ajax_cf7_gr_clear_logs', array($this, 'ajax_clear_logs'));
     }
 
@@ -210,9 +209,6 @@ class CF7_GetResponse_Integration {
                         'email_field' => sanitize_text_field($data['email_field']),
                         'name_field' => isset($data['name_field']) ? sanitize_text_field($data['name_field']) : '',
                         'skip_mail' => !empty($data['skip_mail']),
-                        'gdpr_field_id' => isset($data['gdpr_field_id']) ? sanitize_text_field($data['gdpr_field_id']) : '',
-                        'gdpr_field_name' => isset($data['gdpr_field_name']) ? sanitize_text_field($data['gdpr_field_name']) : '',
-                        'gdpr_field_version' => isset($data['gdpr_field_version']) ? sanitize_text_field($data['gdpr_field_version']) : '',
                         'custom_fields' => $custom_fields
                     );
                 }
@@ -251,7 +247,14 @@ class CF7_GetResponse_Integration {
         <div class="wrap cf7-gr-wrap">
             <h1>📧 CF7 → GetResponse Integration</h1>
             <p class="description">Skonfiguruj automatyczne wysyłanie kontaktów do GetResponse po zaznaczeniu checkboxa</p>
-            
+
+            <div style="margin: 16px 0; padding: 14px 18px; background: #fff8e5; border-left: 4px solid #dba617; border-radius: 4px;">
+                <strong>ℹ️ Status zgody marketingowej (GDPR) w GetResponse:</strong>
+                GR <strong>nie udostępnia API do zapisu statusu zgody</strong> ("Status zgody" w panelu kontaktu). Tylko sam subskrybent może go ustawić — przez kliknięcie linka potwierdzającego (double opt-in) lub formularz hostowany w GR.
+                <br>👉 Jeśli klient potrzebuje "Status zgody: TAK" w GR — <strong>włącz double opt-in na kampanii</strong> i/lub stwórz custom field <code>marketing_consent</code> do audytu.
+                <a href="https://www.getresponse.com/help/how-does-the-consent-status-updated-condition-work.html" target="_blank">Dokumentacja GR →</a>
+            </div>
+
             <form method="post" action="">
                 <?php wp_nonce_field('cf7_gr_save_settings', 'cf7_gr_nonce'); ?>
                 
@@ -418,47 +421,6 @@ class CF7_GetResponse_Integration {
                                                 <p class="no-fields">❌ Brak pól acceptance/checkbox w tym formularzu</p>
                                                 <small>Dodaj: <code>[acceptance newsletter "Zapisz na newsletter"]</code></small>
                                             <?php endif; ?>
-
-                                            <div style="margin-top: 20px; padding: 15px; background: #f0f6ff; border: 1px solid #2271b1; border-radius: 6px;">
-                                                <label><strong>🔒 Pole zgody GetResponse (GDPR):</strong></label>
-                                                <div style="display: flex; gap: 10px; align-items: flex-start; margin-top: 8px;">
-                                                    <select class="gdpr-field-select"
-                                                            name="mappings[<?php echo $form_id; ?>][gdpr_field_id]"
-                                                            data-form-id="<?php echo $form_id; ?>"
-                                                            style="flex: 1;">
-                                                        <option value="">-- Nie wysyłaj statusu zgody --</option>
-                                                        <?php if (!empty($mapping['gdpr_field_id'])): ?>
-                                                            <option value="<?php echo esc_attr($mapping['gdpr_field_id']); ?>"
-                                                                    data-version="<?php echo esc_attr($mapping['gdpr_field_version'] ?? ''); ?>"
-                                                                    data-name="<?php echo esc_attr($mapping['gdpr_field_name'] ?? ''); ?>"
-                                                                    selected>
-                                                                <?php echo esc_html($mapping['gdpr_field_name'] ?: $mapping['gdpr_field_id']); ?>
-                                                                <?php if (!empty($mapping['gdpr_field_version'])): ?>
-                                                                    (v<?php echo esc_html($mapping['gdpr_field_version']); ?>)
-                                                                <?php endif; ?>
-                                                            </option>
-                                                        <?php endif; ?>
-                                                    </select>
-                                                    <button type="button" class="button load-gdpr-fields-btn" data-form-id="<?php echo $form_id; ?>">
-                                                        🔄 Załaduj
-                                                    </button>
-                                                </div>
-                                                <input type="hidden"
-                                                       class="gdpr-field-name"
-                                                       name="mappings[<?php echo $form_id; ?>][gdpr_field_name]"
-                                                       value="<?php echo esc_attr($mapping['gdpr_field_name'] ?? ''); ?>">
-                                                <input type="hidden"
-                                                       class="gdpr-field-version"
-                                                       name="mappings[<?php echo $form_id; ?>][gdpr_field_version]"
-                                                       value="<?php echo esc_attr($mapping['gdpr_field_version'] ?? ''); ?>">
-                                                <small style="display: block; margin-top: 8px;">
-                                                    Gdy pole wyzwalające (powyżej) jest zaznaczone, kontakt otrzyma status <strong>"Zgoda: TAK"</strong> na to pole w GetResponse.
-                                                    Wybór pola GDPR = zapisz zgodę marketingową. Brak wyboru = tylko zapis na listę bez zgody marketingowej.
-                                                    Pola zgód definiujesz w GR → Kontakty → Pola zgód.
-                                                    <br>⚠️ Po zmianie treści zgody w GR załaduj ponownie pola, aby zapisać aktualną wersję.
-                                                </small>
-                                                <div class="gdpr-fields-status" style="display: none; margin-top: 10px;"></div>
-                                            </div>
                                         </div>
                                     </div>
                                     <div class="config-field" style="margin-top: 20px; padding: 15px; background: #fff0f0; border: 1px solid #d63638; border-radius: 6px;">
@@ -783,20 +745,6 @@ class CF7_GetResponse_Integration {
             }
         }
         
-        // KROK 4b: Przygotuj pola zgody GDPR
-        // Wysyłamy tylko gdy pole wyzwalające jest zaznaczone i wybrane jest pole zgody GR
-        $gdpr_fields = array();
-        if ($acceptance_checked && !empty($mapping['gdpr_field_id'])) {
-            $gdpr_entry = array(
-                'gdprFieldId' => $mapping['gdpr_field_id'],
-                'consent'     => 'yes',
-            );
-            if (!empty($mapping['gdpr_field_version'])) {
-                $gdpr_entry['version'] = $mapping['gdpr_field_version'];
-            }
-            $gdpr_fields[] = $gdpr_entry;
-        }
-
         // KROK 5: Wyślij do GetResponse
         if ($mode === 'dual') {
             // Tryb dual - zawsze zapisz na listę główną
@@ -806,8 +754,7 @@ class CF7_GetResponse_Integration {
                 $email,
                 $name,
                 $custom_fields,
-                $form_id,
-                $gdpr_fields
+                $form_id
             );
 
             if (!$result_primary) {
@@ -822,8 +769,7 @@ class CF7_GetResponse_Integration {
                     $email,
                     $name,
                     $custom_fields,
-                    $form_id,
-                    $gdpr_fields
+                    $form_id
                 );
 
                 if (!$result_secondary) {
@@ -838,8 +784,7 @@ class CF7_GetResponse_Integration {
                 $email,
                 $name,
                 $custom_fields,
-                $form_id,
-                $gdpr_fields
+                $form_id
             );
 
             if (!$result) {
@@ -859,7 +804,7 @@ class CF7_GetResponse_Integration {
      * @param array  $custom_fields Custom field values (optional)
      * @return bool True on success, false on failure
      */
-    private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array(), $form_id = 0, $gdpr_fields = array()) {
+    private function add_to_getresponse($api_key, $campaign_id, $email, $name = '', $custom_fields = array(), $form_id = 0) {
         $data = array(
             'email' => $email,
             'campaign' => array('campaignId' => $campaign_id)
@@ -871,10 +816,6 @@ class CF7_GetResponse_Integration {
 
         if (!empty($custom_fields)) {
             $data['customFieldValues'] = $custom_fields;
-        }
-
-        if (!empty($gdpr_fields)) {
-            $data['gdprFields'] = $gdpr_fields;
         }
 
         $json_data = json_encode($data);
@@ -1041,11 +982,16 @@ class CF7_GetResponse_Integration {
                                 <td><?php echo esc_html($log['name'] ?: '—'); ?></td>
                                 <td><code style="font-size: 11px;"><?php echo esc_html($log['campaign_id']); ?></code></td>
                                 <td>
-                                    <?php if ($cf_summary): ?>
-                                        <small style="white-space: pre-line;"><?php echo esc_html($cf_summary); ?></small>
-                                    <?php else: ?>
-                                        <span style="color: #999;">—</span>
-                                    <?php endif; ?>
+                                    <div class="cf-cell">
+                                        <div class="cf-cell-inner">
+                                            <?php if ($cf_summary): ?>
+                                                <small style="white-space: pre-line;"><?php echo esc_html($cf_summary); ?></small>
+                                            <?php else: ?>
+                                                <span style="color: #999;">—</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <button type="button" class="cf-cell-toggle">▼ Pokaż więcej</button>
+                                    </div>
                                 </td>
                                 <td>
                                     <?php if ($response_text): ?>
@@ -1053,6 +999,13 @@ class CF7_GetResponse_Integration {
                                     <?php else: ?>
                                         <span style="color: #999;">OK</span>
                                     <?php endif; ?>
+                                    <details style="margin-top: 4px;">
+                                        <summary style="cursor: pointer; font-size: 11px; color: #2271b1;">JSON</summary>
+                                        <pre style="background: #f6f7f7; padding: 8px; border-radius: 4px; font-size: 10px; max-width: 400px; overflow: auto; margin-top: 4px;"><?php
+                                            echo esc_html("REQUEST:\n" . json_encode($log['request'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                                            echo esc_html("\n\nRESPONSE:\n" . json_encode($log['response'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                                        ?></pre>
+                                    </details>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -1061,8 +1014,65 @@ class CF7_GetResponse_Integration {
             <?php endif; ?>
         </div>
 
+        <style>
+        .cf-cell {
+            position: relative;
+        }
+        .cf-cell-inner {
+            max-height: 150px;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
+        }
+        .cf-cell.expanded .cf-cell-inner {
+            max-height: none;
+        }
+        .cf-cell:not(.expanded).is-overflow .cf-cell-inner::after {
+            content: '';
+            position: absolute;
+            bottom: 28px;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: linear-gradient(transparent, #fff);
+            pointer-events: none;
+        }
+        .cf-cell-toggle {
+            display: none;
+            margin-top: 6px;
+            padding: 2px 8px;
+            background: #f0f6ff;
+            border: 1px solid #2271b1;
+            color: #2271b1;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .cf-cell-toggle:hover {
+            background: #2271b1;
+            color: #fff;
+        }
+        .cf-cell.is-overflow .cf-cell-toggle {
+            display: inline-block;
+        }
+        </style>
+
         <script>
         jQuery(document).ready(function($) {
+            // Collapse cells over 150px with toggle button
+            $('.cf-cell').each(function() {
+                var cell = $(this);
+                var inner = cell.find('.cf-cell-inner');
+                if (inner[0].scrollHeight > 150) {
+                    cell.addClass('is-overflow');
+                }
+            });
+
+            $(document).on('click', '.cf-cell-toggle', function() {
+                var cell = $(this).closest('.cf-cell');
+                cell.toggleClass('expanded');
+                $(this).text(cell.hasClass('expanded') ? '▲ Zwiń' : '▼ Pokaż więcej');
+            });
+
             $('#cf7-gr-clear-logs').on('click', function() {
                 if (!confirm('Na pewno wyczyścić wszystkie logi?')) return;
                 var btn = $(this);
@@ -1267,92 +1277,6 @@ class CF7_GetResponse_Integration {
         } while (count($fields_data) === $per_page);
 
         return $all_fields;
-    }
-
-    /**
-     * AJAX handler to fetch GDPR consent fields from GetResponse
-     *
-     * @since 3.3.0
-     * @return void Sends JSON response
-     */
-    public function ajax_get_gdpr_fields() {
-        check_ajax_referer('cf7_gr_ajax_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(array(
-                'message' => esc_html__('Insufficient permissions.', 'cf7-getresponse')
-            ));
-            return;
-        }
-
-        $api_key = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
-
-        if (empty($api_key)) {
-            wp_send_json_error(array(
-                'message' => esc_html__('API Key is required.', 'cf7-getresponse')
-            ));
-            return;
-        }
-
-        $gdpr_fields = $this->get_gdpr_fields_from_api($api_key);
-
-        if ($gdpr_fields === false) {
-            wp_send_json_error(array(
-                'message' => esc_html__('Error fetching GDPR fields from GetResponse.', 'cf7-getresponse')
-            ));
-            return;
-        }
-
-        wp_send_json_success(array('gdpr_fields' => $gdpr_fields));
-    }
-
-    /**
-     * Fetch GDPR consent fields from GetResponse API
-     *
-     * @since 3.3.0
-     * @param string $api_key GetResponse API key
-     * @return array|false Array of GDPR fields on success, false on failure
-     */
-    private function get_gdpr_fields_from_api($api_key) {
-        $ch = curl_init('https://api.getresponse.com/v3/gdpr-fields');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            'X-Auth-Token: api-key ' . $api_key,
-            'Content-Type: application/json'
-        ));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_error = curl_error($ch);
-        curl_close($ch);
-
-        if ($response === false) {
-            error_log("CF7→GR API Error (get gdpr fields): " . $curl_error);
-            return false;
-        }
-
-        if ($http_code !== 200) {
-            error_log("CF7→GR API Error (get gdpr fields) [{$http_code}]: " . $response);
-            return false;
-        }
-
-        $fields_data = json_decode($response, true);
-        if (!is_array($fields_data)) {
-            return false;
-        }
-
-        $fields = array();
-        foreach ($fields_data as $field) {
-            $fields[] = array(
-                'id'      => isset($field['gdprFieldId']) ? $field['gdprFieldId'] : '',
-                'name'    => isset($field['name']) ? $field['name'] : '',
-                'version' => isset($field['version']) ? (string) $field['version'] : '',
-            );
-        }
-
-        return $fields;
     }
 }
 
