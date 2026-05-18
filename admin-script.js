@@ -173,6 +173,80 @@ jQuery(document).ready(function($) {
     });
 
     /**
+     * Load GDPR consent fields from GetResponse API via AJAX
+     */
+    $(document).on('click', '.load-gdpr-fields-btn', function() {
+        var btn = $(this);
+        var card = btn.closest('.cf7-gr-form-card');
+        var apiKey = card.find('.api-key-input').val().trim();
+        var select = card.find('.gdpr-field-select');
+        var statusMsg = card.find('.gdpr-fields-status');
+
+        statusMsg.hide().text('');
+
+        if (!apiKey) {
+            statusMsg.css('color', '#d63638').text('❌ Wpisz najpierw API Key').show();
+            return;
+        }
+
+        btn.prop('disabled', true).text('⏳ ...');
+
+        $.ajax({
+            url: cf7GrAjax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cf7_gr_get_gdpr_fields',
+                nonce: cf7GrAjax.nonce,
+                api_key: apiKey
+            },
+            success: function(response) {
+                btn.prop('disabled', false).text('🔄 Załaduj');
+
+                if (response.success && response.data.gdpr_fields) {
+                    var fields = response.data.gdpr_fields;
+                    var currentVal = select.val();
+                    var currentVersion = card.find('.gdpr-field-version').val();
+
+                    select.html('<option value="">-- Nie wysyłaj statusu zgody --</option>');
+                    fields.forEach(function(field) {
+                        var label = field.name + (field.version ? ' (v' + field.version + ')' : '');
+                        var option = $('<option></option>')
+                            .attr('value', field.id)
+                            .attr('data-version', field.version || '')
+                            .attr('data-name', field.name || '')
+                            .text(label);
+                        select.append(option);
+                    });
+
+                    // Przywróć zaznaczenie i zapisz aktualną wersję z API
+                    if (currentVal) {
+                        select.val(currentVal);
+                        select.trigger('change');
+                    }
+
+                    statusMsg.css('color', '#00a32a').text('✅ Załadowano ' + fields.length + ' pól zgód').show();
+                } else {
+                    statusMsg.css('color', '#d63638').text('❌ ' + (response.data.message || 'Nieznany błąd')).show();
+                }
+            },
+            error: function(xhr, status, error) {
+                btn.prop('disabled', false).text('🔄 Załaduj');
+                statusMsg.css('color', '#d63638').text('❌ Błąd połączenia: ' + error).show();
+            }
+        });
+    });
+
+    /**
+     * Update hidden gdpr_field_name and gdpr_field_version when GDPR field select changes
+     */
+    $(document).on('change', '.gdpr-field-select', function() {
+        var selectedOption = $(this).find('option:selected');
+        var card = $(this).closest('.cf7-gr-form-card');
+        card.find('.gdpr-field-name').val(selectedOption.data('name') || '');
+        card.find('.gdpr-field-version').val(selectedOption.data('version') || '');
+    });
+
+    /**
      * Add new custom field mapping row
      *
      * Clones the custom field template and appends it to the container
@@ -230,6 +304,9 @@ jQuery(document).ready(function($) {
         var apiKey = card.find('.api-key-input').val().trim();
         if (apiKey && card.find('.gr-custom-field-select').length) {
             card.find('.load-custom-fields-btn').trigger('click');
+        }
+        if (apiKey && card.find('.gdpr-field-select').length) {
+            card.find('.load-gdpr-fields-btn').trigger('click');
         }
     });
 
